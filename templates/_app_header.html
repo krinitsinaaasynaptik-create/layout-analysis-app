@@ -1,0 +1,34 @@
+{% set active = header_active_section|default('market') %}
+{% set show_export_action = show_export|default(true) %}
+{% set show_refresh_action = show_refresh|default(false) %}
+{% set export_url = export_href|default('/api/export.csv') %}
+<header class="topbar page-header app-header">
+  <div class="app-header-top">
+    <div class="header-left">
+      <p class="eyebrow header-context">{{ header_breadcrumb }}</p>
+      <h1 class="header-title">{{ header_title }}</h1>
+    </div>
+    <div class="header-actions header-action-group" aria-label="Действия">
+      {% if show_export_action %}
+        <a class="button ghost header-action-button" href="{{ export_url }}">Экспорт</a>
+      {% endif %}
+      {% if show_refresh_action %}
+        <button class="button header-action-button" id="refreshButton" type="button">Обновить</button>
+      {% endif %}
+    </div>
+  </div>
+  <nav class="header-nav" aria-label="Основная навигация">
+    <a class="header-nav-link {% if active == 'market' %}header-nav-link-active{% endif %}" href="/market">Обзор рынка</a>
+    <a class="header-nav-link {% if active == 'compare' %}header-nav-link-active{% endif %}" href="/compare">Сравнение с КССК</a>
+    <a class="header-nav-link {% if active == 'layouts' %}header-nav-link-active{% endif %}" href="/layouts">Планировки</a>
+    <a class="header-nav-link {% if active == 'dashboard' %}header-nav-link-active{% endif %}" href="/dashboard">Дашборд</a>
+  </nav>
+</header>
+{% if show_refresh_action %}
+  <div class="refresh-token-panel" id="refreshTokenPanel" hidden>
+    <label>Токен Объектива
+      <input id="objectivTokenInput" type="password" autocomplete="off" placeholder="access_token для Объектива">
+    </label>
+    <p>Поле можно оставить пустым, если токен уже задан в окружении сервиса.</p>
+  </div>
+{% endif %}

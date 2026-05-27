@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import os
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+from urllib.parse import urljoin
+
+import httpx
+
+from .config import CACHE_DIR, OBJECTIV_BASE_URL
+from .models import Flat, House
+from .parser import REQUEST_HEADERS
+
+
+SALE_STATUS = "В продаже"
+
+
+class ObjectivParser:
+    def __init__(
+        self,
+        *,
+        group_name: str = "СМУ-5",
+        access_token: str | None = None,
+        base_url: str = OBJECTIV_BASE_URL,
+    ) -> None:
+        self.group_name = group_name
+        self.base_url = base_url.rstrip("/")
+        self.access_token = access_token or os.environ.get("OBJECTIV_ACCESS_TOKEN", "")
+        headers = dict(REQUEST_HEADERS)
+        headers.update({"Accept": "application/json", "Content-Type": "application/json"})
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        self.client = httpx.Client(headers=headers, timeout=30.0, follow_redirects=True)
+
+    def close(self) -> None:
+        self.client.close()
+
+    def parse(self) -> Tuple[List[House], List[Flat], int]:
+        if not self.access_token:
+            raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
+
+        group_id = self._group_id()
+        projects = self._get_json("/api/ProjectCards/GetGroupProjects", params={"groupId": group_id}).get("projects") or []
+
+        houses_by_id: Dict[str, House] = {}
+        flats: List[Flat] = []
+        source_total = 0
+
+        for item in projects:
+            project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
+            for oks in project.get("okses") or []:
+                oks_id = int(oks["id"])
+                oks_info = self._get_json("/api/ProjectCards/GetOksInfo", params={"oksId": oks_id})
+                house = self._house(project, oks_info)
+                houses_by_id[house.house_id] = house
+
+                on_date = self._latest_grid_date(oks_id)
+                grid = self._get_json("/api/ProjectCards/GetOksGrid", params={"oksId": oks_id, "onDate": on_date})
+                self._write_cache(f"objectiv_grid_{oks_id}.json", grid)
+
+                lots = self._grid_lots(grid)
+                source_total += len(lots)
+                flats.extend(self._parse_grid_flats(project, house, lots))
+
+        houses = sorted(houses_by_id.values(), key=lambda item: (item.project_name, item.house_name))
+        flats = sorted(flats, key=lambda item: (item.project_name, item.house_name, item.floor or 0, item.code))
+        return houses, flats, source_total
+
+    def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        response = self.client.get(urljoin(self.base_url, path), params=params)
+        if response.status_code == 401:
+            raise RuntimeError(
+                "Объектив вернул 401 Unauthorized. Вставьте свежий access_token из текущей авторизованной сессии "
+                "Объектива, без префикса Bearer."
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def _group_id(self) -> int:
+        data = self._get_json("/api/ProjectCards/GetGroups")
+        for group in data.get("groups") or []:
+            if group.get("name") == self.group_name:
+                return int(group["id"])
+        raise ValueError(f"Objectiv group not found: {self.group_name}")
+
+    def _latest_grid_date(self, oks_id: int) -> str:
+        data = self._get_json("/api/ProjectCards/getGridIntervals", params={"oksId": oks_id})
+        years = data.get("years") or []
+        latest = max(
+            (
+                (int(year["value"]), int(month["value"]), int(day))
+                for year in years
+                for month in year.get("months") or []
+                for day in month.get("days") or []
+            ),
+            default=None,
+        )
+        if latest is None:
+            raise ValueError(f"Objectiv grid intervals are empty for oksId={oks_id}")
+        return f"{latest[0]:04d}-{latest[1]:02d}-{latest[2]:02d}"
+
+    def _house(self, project: Dict[str, Any], oks_info: Dict[str, Any]) -> House:
+        project_id = f"objectiv:{project['id']}"
+        house_id = f"objectiv:{oks_info['id']}"
+        house_name = f"{project.get('name')}, корпус {oks_info.get('name') or oks_info['id']}"
+        return House(
+            project_id=project_id,
+            project_name=str(project.get("name") or project_id),
+            house_id=house_id,
+            house_name=house_name,
+        )
+
+    def _grid_lots(self, grid: Dict[str, Any]) -> List[Dict[str, Any]]:
+        lots: List[Dict[str, Any]] = []
+        for section in grid.get("sections") or []:
+            for floor in section.get("floors") or []:
+                for lot in floor.get("gridLots") or []:
+                    lots.append(lot)
+        return lots
+
+    def _parse_grid_flats(self, project: Dict[str, Any], house: House, lots: List[Dict[str, Any]]) -> List[Flat]:
+        flats = []
+        project_site = (project.get("projectSites") or [""])[0]
+        for lot in lots:
+            status = lot.get("status") or {}
+            if lot.get("type") != "квартира" or status.get("status") != SALE_STATUS:
+                continue
+            image_url = self._image_url(lot.get("planResourcePath"))
+            if not image_url:
+                continue
+            lot_id = str(lot.get("lotId") or lot.get("pdLotId") or lot.get("number"))
+            code = str(lot.get("number") or lot_id)
+            flats.append(
+                Flat(
+                    flat_id=self._flat_id(house.house_id, code, lot_id),
+                    code=code,
+                    project_id=house.project_id,
+                    project_name=house.project_name,
+                    house_id=house.house_id,
+                    house_name=house.house_name,
+                    rooms=self._normalize_rooms(lot.get("rooms")),
+                    area=self._float(lot.get("area")),
+                    floor=self._int(lot.get("floor")),
+                    price=self._float(status.get("price")),
+                    url=project_site or f"{self.base_url}/ProjectCards/",
+                    image_url=image_url,
+                    layout_uuid=self._layout_uuid(image_url),
+                )
+            )
+        return flats
+
+    def _flat_id(self, house_id: str, code: str, fallback: str) -> str:
+        normalized_code = "".join(char if char.isalnum() else "-" for char in code.strip().lower()).strip("-")
+        if normalized_code:
+            return f"{house_id}:{normalized_code}"
+        return f"objectiv:{fallback}"
+
+    def _image_url(self, value: str | None) -> str:
+        if not value:
+            return ""
+        return urljoin(self.base_url, value)
+
+    def _layout_uuid(self, image_url: str) -> str:
+        return Path(image_url.split("?", 1)[0]).name or image_url
+
+    def _normalize_rooms(self, value: str | None) -> str:
+        text = (value or "").strip().lower()
+        if "студи" in text:
+            return "СТУДИЯ"
+        if text.endswith("-к"):
+            return text.replace("-к", "К").upper()
+        if text.endswith("+к"):
+            return text.replace("к", "").upper()
+        return text.upper() or "UNKNOWN"
+
+    def _float(self, value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _int(self, value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _write_cache(self, filename: str, data: Dict[str, Any]) -> None:
+        CACHE_DIR.mkdir(exist_ok=True)
+        (CACHE_DIR / filename).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

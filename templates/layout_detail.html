@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Типовая планировка{% if report.selected_developer %} — {{ report.selected_developer.name }}{% endif %}</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% if report.selected_developer %}
+    {% if report.selected_developer.id == 'kssk' %}
+      {% set header_active_section = 'compare' %}
+    {% else %}
+      {% set header_active_section = 'developer_detail' %}
+    {% endif %}
+    {% set header_breadcrumb = report.city ~ ' · Планировки · ' ~ report.selected_developer.name %}
+  {% else %}
+    {% set header_active_section = 'layouts' %}
+    {% set header_breadcrumb = report.city ~ ' · Планировки' %}
+  {% endif %}
+  {% set header_title = 'Типовая планировка' %}
+  {% set show_export = true %}
+  {% set show_refresh = false %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% if report.selected_developer %}
+      {% if report.selected_developer.id == 'kssk' %}
+        <nav class="local-tabs" aria-label="Навигация по КССК">
+          <a class="local-tab" href="/compare">Обзор</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Аналитика</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        </nav>
+      {% else %}
+        <nav class="local-tabs" aria-label="Навигация по застройщику">
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Обзор</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        </nav>
+      {% endif %}
+      <a class="back-link" href="/developers/{{ report.selected_developer.id }}/layouts">← Назад к планировкам {{ report.selected_developer.name }}</a>
+    {% else %}
+      <a class="back-link" href="/layouts">← Назад к планировкам</a>
+    {% endif %}
+
+    {% if not layout %}
+      <section class="empty">
+        <h2>Планировка не найдена</h2>
+        <p>Откройте планировку из списка карточек.</p>
+      </section>
+    {% else %}
+      {% set metrics = layout.metrics %}
+      <section class="layout-detail">
+        <article class="panel layout-hero">
+          <img src="{{ layout.local_image_url or layout.representative_image_url }}" alt="Планировка">
+          <div>
+            <p class="eyebrow">{{ layout.rooms_label }}</p>
+            <h2>Планировка №{{ layout.layout_no }}</h2>
+            <p class="muted">{{ layout.flat_count }} квартир · этажи {{ metrics.floors_label or 'нет данных' }}</p>
+            <div class="tag-row">
+              {% for tag in layout.tags %}
+                <span>{{ tag.name }}</span>
+              {% endfor %}
+              {% if not layout.tags %}<span>теги не заданы</span>{% endif %}
+            </div>
+            {% if layout.layout_quality_score %}
+              <p class="score">Оценка качества: {{ layout.layout_quality_score }}</p>
+            {% endif %}
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Редактирование тегов</h2>
+            <span>ручное присвоение</span>
+          </div>
+          <form id="tagForm" class="tag-editor">
+            {% for tag in report.layout_tags %}
+              <label>
+                <input type="checkbox" value="{{ tag.id }}" {% if tag.name in layout.tags|map(attribute='name')|list %}checked{% endif %}>
+                {{ tag.name }}
+              </label>
+            {% endfor %}
+            <button class="button" type="submit">Сохранить теги</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="metrics metrics-six">
+        <div><span>{{ metrics.share_of_house }}%</span><p>доля в доме</p></div>
+        <div><span>{{ metrics.share_of_project }}%</span><p>доля в проекте</p></div>
+        <div><span>{{ metrics.share_of_room }}%</span><p>доля в комнатности</p></div>
+        <div><span>{{ metrics.median_area }}</span><p>медианная площадь, м²</p></div>
+        <div><span>{{ "{:,.0f}".format(metrics.median_price).replace(",", " ") }}</span><p>медианная цена, ₽</p></div>
+        <div><span>{{ "{:,.0f}".format(metrics.median_price_per_sqm).replace(",", " ") }}</span><p>медиана ₽/м²</p></div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Диапазоны</h2>
+          </div>
+          <div class="fact-list">
+            <div><span>Площадь</span><strong>{{ metrics.min_area }}–{{ metrics.max_area }} м²</strong></div>
+            <div><span>Цена</span><strong>{{ "{:,.0f}".format(metrics.min_price).replace(",", " ") }}–{{ "{:,.0f}".format(metrics.max_price).replace(",", " ") }} ₽</strong></div>
+            <div><span>Домов, где встречается</span><strong>{{ metrics.buildings_count }}</strong></div>
+            <div><span>Проектов, где встречается</span><strong>{{ metrics.projects_count }}</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Динамика</h2>
+            <span>{{ report.dynamics.history_status }}</span>
+          </div>
+          <div class="fact-list">
+            <div><span>Новые за период</span><strong>{{ report.dynamics.appeared }}</strong></div>
+            <div><span>Ушли из экспозиции</span><strong>{{ report.dynamics.gone_from_exposure }}</strong></div>
+            <div><span>Темп вымывания</span><strong>{% if report.dynamics.liquidity_rate is not none %}{{ report.dynamics.liquidity_rate }}{% else %}недостаточно истории{% endif %}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Квартиры этой планировки</h2>
+          <span>{{ layout.flat_count }} объектов</span>
+        </div>
+        <table class="analytics-table">
+          <thead><tr><th>Код</th><th>Площадь</th><th>Этаж</th><th>Цена</th><th>Цена за м²</th></tr></thead>
+          <tbody>
+            {% for flat in layout.flats %}
+              <tr>
+                <td><a href="{{ flat.url }}" target="_blank" rel="noreferrer">{{ flat.code }}</a></td>
+                <td>{{ flat.area }} м²</td>
+                <td>{{ flat.floor }}</td>
+                <td>{{ "{:,.0f}".format(flat.price).replace(",", " ") }} ₽</td>
+                <td>{{ "{:,.0f}".format(flat.price_per_sqm or 0).replace(",", " ") }} ₽/м²</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Похожие планировки у конкурентов</h2>
+          <span>первичная эвристика по комнатности, площади, цене за м² и hash</span>
+        </div>
+        <div class="layouts-grid">
+          {% for similar in layout.similar_layouts %}
+            <a class="similar-card" href="{% if report.selected_developer %}/developers/{{ report.selected_developer.id }}/layouts/{{ similar.group_id }}{% else %}/layouts/{{ similar.group_id }}{% endif %}">
+              <img src="{{ similar.local_image_url or similar.representative_image_url }}" alt="">
+              <strong>{{ similar.rooms_label }} · {{ similar.flat_count }} кв.</strong>
+              <span>{{ similar.metrics.avg_area }} м² · {{ "{:,.0f}".format(similar.metrics.avg_price_per_sqm).replace(",", " ") }} ₽/м²</span>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script>
+    const form = document.getElementById('tagForm');
+    const toast = document.getElementById('toast');
+    if (form) {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const tagIds = [...form.querySelectorAll('input:checked')].map((input) => Number(input.value));
+        const response = await fetch('/api/layout-tags/{{ layout.group_id if layout else "" }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag_ids: tagIds })
+        });
+        const payload = await response.json();
+        toast.textContent = payload.message || 'Готово';
+        toast.hidden = false;
+        if (payload.ok) window.location.reload();
+      });
+    }
+  </script>
+</body>
+</html>

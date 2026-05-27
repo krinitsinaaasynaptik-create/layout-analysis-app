@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Аналитика рынка</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% set header_active_section = header_active_section|default('market') %}
+  {% set header_breadcrumb = report.city ~ ' · Управленческий обзор' %}
+  {% set header_title = header_title|default('Аналитика рынка') %}
+  {% set show_export = true %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% set market = report.market %}
+    {% set filters = report.filters %}
+    {% set run = report.latest_run %}
+
+    <section class="status-band {% if market.health.tone == 'warning' %}error{% endif %}">
+      <div>
+        <span class="label">Последнее обновление</span>
+        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
+      </div>
+      <div>
+        <span class="label">Фокус обзора</span>
+        <strong>
+          {% if market.selected_context.project_name %}
+            {{ market.selected_context.project_name }}
+          {% elif market.selected_context.developer_name %}
+            {{ market.selected_context.developer_name }}
+          {% else %}
+            Весь рынок
+          {% endif %}
+        </strong>
+      </div>
+      <div class="status-message">
+        {{ market.health.description }}
+      </div>
+    </section>
+
+    <form class="filters-panel filters-panel-compact market-filters" method="get" action="{{ request.url.path }}">
+      <label>Режим рынка
+        <select name="market_mode">
+          <option value="all" {% if filters.market_mode == 'all' %}selected{% endif %}>С учетом КССК</option>
+          <option value="competitors" {% if filters.market_mode == 'competitors' %}selected{% endif %}>Без учета КССК</option>
+        </select>
+      </label>
+      <label>Застройщик
+        <select name="developer_id">
+          <option value="">Все</option>
+          {% for developer in filters.developer_options %}
+            <option value="{{ developer.id }}" {% if filters.developer_id == developer.id %}selected{% endif %}>{{ developer.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Проект
+        <select name="project_id">
+          <option value="">Все</option>
+          {% for project in filters.project_options %}
+            <option value="{{ project.id }}" {% if filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Период анализа
+        <select name="period_days">
+          {% for days in [7, 14, 30, 60, 90] %}
+            <option value="{{ days }}" {% if filters.period_days == days %}selected{% endif %}>{{ days }} дней</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    <section class="market-kpis">
+      {% for card in market.kpis %}
+        <article class="market-kpi tone-{{ card.tone }}">
+          <div class="market-kpi-head">
+            <span class="market-kpi-tag">{{ card.tag }}</span>
+            <span class="metric-help" title="{{ card.helper }}">?</span>
+          </div>
+          <p class="market-kpi-label">{{ card.label }}</p>
+          <strong class="market-kpi-value">{{ card.value }}</strong>
+          <p class="market-kpi-meta">{{ card.meta }}</p>
+        </article>
+      {% endfor %}
+    </section>
+
+    <section class="developer-strip" id="developers">
+      {% for developer in report.developer_summaries %}
+        <a class="developer-strip-card" href="/developers/{{ developer.id }}">
+          <strong>{{ developer.name }}</strong>
+          <span>{{ developer.projects_count }} проектов · {{ developer.flats_count }} квартир · {{ developer.layout_groups_count }} планировок · {{ developer.flats_per_layout }} кв./план.</span>
+        </a>
+      {% endfor %}
+    </section>
+
+    <section class="market-overview-grid">
+      <article class="panel panel-tight" id="dynamics">
+        <div class="panel-head">
+          <h2>Главное за период</h2>
+          <span>{{ filters.period_days }} дней</span>
+        </div>
+        <div class="insight-stack">
+          {% for insight in market.overview_insights %}
+            <article class="insight-card tone-{{ insight.tone }}">
+              <strong>{{ insight.title }}</strong>
+              <p>{{ insight.text }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel panel-tight">
+        <div class="panel-head">
+          <h2>Динамика предложения</h2>
+          <span>{{ market.health.label }}</span>
+        </div>
+        <div class="fact-list compact">
+          <div><span>Было в первом срезе</span><strong>{{ market.dynamics.previous_available_count }}</strong></div>
+          <div><span>Сейчас в продаже</span><strong>{{ market.dynamics.current_available_count }}</strong></div>
+          <div><span title="Квартиры пропали из публичной выдачи. Это не считается продажей без прямого статуса источника.">Ушло из экспозиции</span><strong>{{ market.dynamics.gone_from_exposure }}</strong></div>
+          <div><span>Новых квартир</span><strong>{{ market.dynamics.appeared }}</strong></div>
+          <div><span>С изменением цены</span><strong>{{ market.dynamics.price_changed }}</strong></div>
+        </div>
+        {% if market.health.tone == 'warning' %}
+          <div class="warning-box">{{ market.health.description }}</div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="dashboard-grid market-mid-grid">
+      <article class="panel panel-wide">
+        <div class="panel-head">
+          <h2>Карта проектов</h2>
+          <div class="panel-head-actions">
+            <span>{{ market.scatter.x_label }} · {{ market.scatter.y_label }}</span>
+            {% if market.scatter.points %}
+              <button class="button ghost small" id="openProjectMap" type="button">На весь экран</button>
+            {% endif %}
+          </div>
+        </div>
+        <div class="scatter-wrap" id="projectMap">
+          {% if market.scatter.points %}
+            <div class="scatter-guide">
+              <span><strong>Левее</strong> больше выбор</span>
+              <span><strong>Правее</strong> выше типизация</span>
+              <span><strong>Выше</strong> больше влияние на рынок</span>
+              <span><strong>Круг</strong> {{ market.scatter.size_label|lower }}</span>
+            </div>
+            <div class="scatter-controls" aria-label="Фильтр проектов на карте">
+              <button class="scatter-filter active" type="button" data-map-filter="all">Все проекты</button>
+              {% for item in market.scatter.legend %}
+                <button class="scatter-filter active" type="button" data-map-filter="{{ item.developer_id }}">
+                  <i style="background: {{ item.color }};"></i>{{ item.name }}
+                </button>
+              {% endfor %}
+            </div>
+            <div class="scatter-plane" aria-label="Карта проектов">
+              <div class="scatter-plane-inner">
+                <div class="scatter-quadrant top left">
+                  <strong>Крупный выбор</strong>
+                  <span>много квартир, ниже типизация</span>
+                </div>
+                <div class="scatter-quadrant top right">
+                  <strong>Крупная типизация</strong>
+                  <span>много квартир, больше повторов</span>
+                </div>
+                <div class="scatter-quadrant bottom left">
+                  <strong>Нишевый выбор</strong>
+                  <span>меньше объем, выше разнообразие</span>
+                </div>
+                <div class="scatter-quadrant bottom right">
+                  <strong>Нишевая типизация</strong>
+                  <span>меньше объем, больше повторов</span>
+                </div>
+                <div class="scatter-median-line vertical" style="left: {{ market.scatter.median_x }}px;">
+                  <span>медиана {{ market.scatter.median_x_value }} кв./план.</span>
+                </div>
+                <div class="scatter-median-line horizontal" style="top: {{ market.scatter.median_y }}px;">
+                  <span>медиана {{ market.scatter.median_y_value }} кв.</span>
+                </div>
+                {% for point in market.scatter.points %}
+                  <div
+                    class="scatter-point-wrap label-{{ point.label_side }}"
+                    data-developer-id="{{ point.developer_id }}"
+                    style="left: {{ point.x }}px; top: {{ point.y }}px;"
+                  >
+                    <a
+                      class="scatter-point"
+                      href="{{ point.href }}"
+                      style="width: {{ point.radius * 2 }}px; height: {{ point.radius * 2 }}px; margin-left: -{{ point.radius }}px; margin-top: -{{ point.radius }}px; background: {{ point.color }};"
+                      title="{{ point.project_name }} · {{ point.developer_name }}&#10;{{ point.flats_per_layout }} кв./план.&#10;{{ point.total_flats }} квартир&#10;{{ point.total_layouts }} типовых планировок"
+                      aria-label="{{ point.project_name }}, {{ point.developer_name }}"
+                    ></a>
+                    <a class="scatter-label" href="{{ point.href }}">
+                      <strong>{{ point.project_name }}</strong>
+                      <span>{{ point.developer_name }}</span>
+                      <span>{{ point.total_flats }} кв. · {{ point.flats_per_layout }} кв./план.</span>
+                    </a>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="scatter-axis scatter-axis-y">Выше = больше влияние на рынок</div>
+              <div class="scatter-axis scatter-axis-x-left">Левее = больше выбор</div>
+              <div class="scatter-axis scatter-axis-x-right">Правее = выше типизация</div>
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <strong>Нет данных для карты проектов</strong>
+              <p>Измени фильтры или обнови данные, чтобы увидеть распределение проектов.</p>
+            </div>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Структура предложения</h2>
+          <span>Активное предложение</span>
+        </div>
+        <div class="segment-tabs" role="tablist" aria-label="Структура предложения">
+          <button class="segment-tab" type="button" role="tab" aria-selected="false" data-distribution-tab="price">Цена</button>
+          <button class="segment-tab" type="button" role="tab" aria-selected="false" data-distribution-tab="area">Площадь</button>
+          <button class="segment-tab active" type="button" role="tab" aria-selected="true" data-distribution-tab="rooms">Комнатность</button>
+        </div>
+
+        <div class="distribution-panels">
+          <div class="distribution-panel active" data-distribution-panel="rooms">
+            <div class="project-bars compact">
+              {% for row in market.distributions.rooms %}
+                <div class="bar-row compact">
+                  <div class="bar-label">
+                    <strong>{{ row.rooms_label }}</strong>
+                    <span>{{ row.count }} / {{ row.share }}%</span>
+                  </div>
+                  <div class="bar-track"><div style="width: {{ row.width }}%"></div></div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="distribution-panel" data-distribution-panel="area" hidden>
+            <div class="project-bars compact">
+              {% for row in market.distributions.area %}
+                <div class="bar-row compact">
+                  <div class="bar-label">
+                    <strong>{{ row.label }}</strong>
+                    <span>{{ row.count }} / {{ row.share }}%</span>
+                  </div>
+                  <div class="bar-track"><div style="width: {{ row.width }}%"></div></div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="distribution-panel" data-distribution-panel="price" hidden>
+            <div class="project-bars compact">
+              {% for row in market.distributions.price %}
+                <div class="bar-row compact">
+                  <div class="bar-label">
+                    <strong>{{ row.label }}</strong>
+                    <span>{{ row.count }} / {{ row.share }}%</span>
+                  </div>
+                  <div class="bar-track"><div style="width: {{ row.width }}%"></div></div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="focus-card-grid">
+      {% for card in market.focus_cards %}
+        <a class="focus-card" href="{{ card.href }}">
+          <p class="eyebrow">{{ card.title }}</p>
+          <h3>{{ card.project_name }}</h3>
+          <p class="muted">{{ card.developer_name }}</p>
+          <strong>{{ card.value }}</strong>
+          <p class="focus-card-meta">{{ card.meta }}</p>
+          <div class="badge-row">
+            <span class="badge">{{ card.reliability }}</span>
+            {% for badge in card.badges %}
+              <span class="badge tone-{{ badge.tone }}">{{ badge.label }}</span>
+            {% endfor %}
+          </div>
+        </a>
+      {% endfor %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Застройщики</h2>
+        <span>Строки ведут в аналитику конкретного застройщика</span>
+      </div>
+      <table class="analytics-table clickable-table">
+        <thead>
+          <tr>
+            <th>Застройщик</th>
+            <th>Проектов</th>
+            <th>Квартир</th>
+            <th>Типовых планировок</th>
+            <th title="Квартир на одну типовую планировку">Кв./план.</th>
+            <th title="Медианная цена за квадратный метр по активной выдаче">Медианная цена за м²</th>
+            <th title="Изменение числа квартир в продаже относительно первого среза периода">Динамика за период</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in market.developer_rows %}
+            <tr data-href="{{ row.href }}">
+              <td><a href="{{ row.href }}">{{ row.name }}</a></td>
+              <td>{{ row.projects_count }}</td>
+              <td>{{ row.flats_count }}</td>
+              <td>{{ row.layout_groups_count }}</td>
+              <td>{{ row.flats_per_layout }}</td>
+              <td>{{ "{:,.0f}".format(row.median_price_per_sqm).replace(",", " ") }} ₽/м²</td>
+              <td>
+                <span class="badge {% if row.status_tone == 'warning' %}tone-warning{% endif %}">{{ row.dynamics_label }}</span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Ключевые отклонения от рынка</h2>
+        <span>Детальная таблица вариативности перенесена ниже и больше не доминирует над обзором</span>
+      </div>
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Проект</th>
+            <th>Застройщик</th>
+            <th title="Квартир на одну типовую планировку">Кв./план.</th>
+            <th title="Медиана рынка по выбранной выборке">Медиана рынка</th>
+            <th>Отклонение</th>
+            <th title="Надежность зависит от размера текущей выборки">Надежность</th>
+            <th>Бейджи</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in market.variability_table %}
+            <tr>
+              <td><a href="{{ item.detail_url }}">{{ item.project_name }}</a></td>
+              <td>{{ item.developer_name }}</td>
+              <td>{{ item.value }}</td>
+              <td>{{ item.market_median }}</td>
+              <td>{{ item.deviation_percent }}%</td>
+              <td>{{ item.reliability }}</td>
+              <td>
+                <div class="badge-row">
+                  {% for badge in item.badges %}
+                    <span class="badge tone-{{ badge.tone }}">{{ badge.label }}</span>
+                  {% endfor %}
+                  {% if not item.badges %}
+                    <span class="muted">без яркого отклонения</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <div class="map-modal" id="projectMapModal" hidden>
+    <div class="map-modal-head">
+      <div>
+        <p class="eyebrow">Карта проектов</p>
+        <h2>Позиционирование проектов по выбору и масштабу</h2>
+      </div>
+      <button class="button ghost small" id="closeProjectMap" type="button">Закрыть</button>
+    </div>
+    <div class="map-modal-body" id="projectMapModalBody"></div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    const projectMap = document.getElementById('projectMap');
+    const projectMapPlaceholder = document.createComment('project-map-placeholder');
+    const openProjectMap = document.getElementById('openProjectMap');
+    const closeProjectMap = document.getElementById('closeProjectMap');
+    const projectMapModal = document.getElementById('projectMapModal');
+    const projectMapModalBody = document.getElementById('projectMapModalBody');
+
+    function openMapModal() {
+      if (!projectMap || !projectMapModalBody || !projectMapModal) return;
+      projectMap.parentNode.insertBefore(projectMapPlaceholder, projectMap);
+      projectMapModalBody.appendChild(projectMap);
+      projectMapModal.hidden = false;
+      document.body.classList.add('modal-open');
+    }
+
+    function closeMapModal() {
+      if (!projectMap || !projectMapModal || !projectMapPlaceholder.parentNode) return;
+      projectMapPlaceholder.parentNode.insertBefore(projectMap, projectMapPlaceholder);
+      projectMapPlaceholder.remove();
+      projectMapModal.hidden = true;
+      document.body.classList.remove('modal-open');
+    }
+
+    if (openProjectMap) openProjectMap.addEventListener('click', openMapModal);
+    if (closeProjectMap) closeProjectMap.addEventListener('click', closeMapModal);
+    if (projectMapModal) {
+      projectMapModal.addEventListener('click', (event) => {
+        if (event.target === projectMapModal) closeMapModal();
+      });
+    }
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && projectMapModal && !projectMapModal.hidden) closeMapModal();
+    });
+
+    const scatterFilters = [...document.querySelectorAll('.scatter-filter')];
+    const scatterPoints = [...document.querySelectorAll('.scatter-point-wrap')];
+    const allFilter = document.querySelector('[data-map-filter="all"]');
+    const developerFilters = scatterFilters.filter((button) => button.dataset.mapFilter !== 'all');
+
+    function applyMapFilters() {
+      const activeDevelopers = new Set(
+        developerFilters.filter((button) => button.classList.contains('active')).map((button) => button.dataset.mapFilter)
+      );
+      scatterPoints.forEach((point) => {
+        point.hidden = !activeDevelopers.has(point.dataset.developerId);
+      });
+      if (allFilter) {
+        allFilter.classList.toggle('active', activeDevelopers.size === developerFilters.length);
+      }
+    }
+
+    scatterFilters.forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.dataset.mapFilter === 'all') {
+          const shouldEnableAll = !button.classList.contains('active');
+          developerFilters.forEach((item) => item.classList.toggle('active', shouldEnableAll));
+        } else {
+          button.classList.toggle('active');
+        }
+        applyMapFilters();
+      });
+    });
+
+    document.querySelectorAll('.segment-tabs').forEach((tablist) => {
+      const tabs = [...tablist.querySelectorAll('.segment-tab')];
+      const panelRoot = tablist.parentElement;
+      const panels = [...panelRoot.querySelectorAll('.distribution-panel')];
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.dataset.distributionTab;
+          tabs.forEach((item) => {
+            const active = item === tab;
+            item.classList.toggle('active', active);
+            item.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          panels.forEach((panel) => {
+            const active = panel.dataset.distributionPanel === target;
+            panel.classList.toggle('active', active);
+            panel.hidden = !active;
+          });
+        });
+      });
+    });
+
+    document.querySelectorAll('.clickable-table tbody tr[data-href]').forEach((row) => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest('a')) return;
+        window.location.href = row.dataset.href;
+      });
+    });
+  </script>
+  {% include "_refresh_script.html" %}
+</body>
+</html>

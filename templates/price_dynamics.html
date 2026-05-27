@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Динамика цен по домам</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-8">
+</head>
+<body>
+  {% set header_active_section = 'dashboard' %}
+  {% set header_breadcrumb = 'Дашборд · Отчеты' %}
+  {% set header_title = 'Динамика цен по домам' %}
+  {% set show_export = true %}
+  {% set export_href = '/api/price-dynamics.csv?' ~ request.query_params %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    <nav class="local-tabs" aria-label="Отчеты дашборда">
+      <a class="local-tab" href="/dashboard">Сводный отчет по площадям</a>
+      <a class="local-tab local-tab-active" href="/dashboard/price-dynamics">Динамика цен по домам</a>
+    </nav>
+
+    <form class="filters-panel price-dynamics-filters" method="get" action="/dashboard/price-dynamics">
+      <input type="hidden" name="view" value="{{ report.filters.view }}">
+      <label>Период
+        <select name="period">
+          <option value="7d" {% if report.filters.period == '7d' %}selected{% endif %}>Последние 7 дней</option>
+          <option value="30d" {% if report.filters.period == '30d' %}selected{% endif %}>Последние 30 дней</option>
+          <option value="90d" {% if report.filters.period == '90d' %}selected{% endif %}>Последние 90 дней</option>
+          <option value="6m" {% if report.filters.period == '6m' %}selected{% endif %}>Последние 6 месяцев</option>
+          <option value="12m" {% if report.filters.period == '12m' %}selected{% endif %}>Последние 12 месяцев</option>
+          <option value="all" {% if report.filters.period == 'all' %}selected{% endif %}>Все время</option>
+        </select>
+      </label>
+      {% if report.is_history_view %}
+        <label>Детализация
+          <select name="granularity">
+            <option value="slice" {% if report.filters.granularity == 'slice' %}selected{% endif %}>По срезам</option>
+            <option value="day" {% if report.filters.granularity == 'day' %}selected{% endif %}>По дням</option>
+            <option value="week" {% if report.filters.granularity == 'week' %}selected{% endif %}>По неделям</option>
+            <option value="month" {% if report.filters.granularity == 'month' %}selected{% endif %}>По месяцам</option>
+          </select>
+        </label>
+      {% else %}
+        <input type="hidden" name="granularity" value="slice">
+      {% endif %}
+      <label>Застройщик
+        <select name="developer_id">
+          <option value="">Все застройщики</option>
+          {% for developer in report.filters.developer_options %}
+            <option value="{{ developer.id }}" {% if report.filters.developer_id == developer.id %}selected{% endif %}>{{ developer.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Проект
+        <select name="project_id">
+          <option value="">Все проекты</option>
+          {% for project in report.filters.project_options %}
+            <option value="{{ project.id }}" {% if report.filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Дом
+        <select name="house_id">
+          <option value="">Все дома</option>
+          {% for house in report.filters.house_options %}
+            <option value="{{ house.id }}" {% if report.filters.house_id == house.id %}selected{% endif %}>{{ house.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Комнатность
+        <select name="rooms">
+          <option value="">Все форматы</option>
+          {% for room in report.filters.room_options %}
+            <option value="{{ room.value }}" {% if report.filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Площадь
+        <select name="area_group">
+          <option value="">Все диапазоны</option>
+          {% for area in report.filters.area_options %}
+            <option value="{{ area.key }}" {% if report.filters.area_group == area.key %}selected{% endif %}>{{ area.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Показывать
+        <select name="status_filter">
+          <option value="all" {% if report.filters.status_filter == 'all' %}selected{% endif %}>Все</option>
+          <option value="growth" {% if report.filters.status_filter == 'growth' %}selected{% endif %}>Только рост</option>
+          <option value="decline" {% if report.filters.status_filter == 'decline' %}selected{% endif %}>Только снижение</option>
+          <option value="new" {% if report.filters.status_filter == 'new' %}selected{% endif %}>Только новые</option>
+          <option value="gone" {% if report.filters.status_filter == 'gone' %}selected{% endif %}>Только ушедшие</option>
+          <option value="stable" {% if report.filters.status_filter == 'stable' %}selected{% endif %}>Без изменений</option>
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    <nav class="local-tabs" aria-label="Режим просмотра динамики">
+      <a class="local-tab {% if not report.is_history_view %}local-tab-active{% endif %}" href="/dashboard/price-dynamics?period={{ report.filters.period }}&developer_id={{ report.filters.developer_id }}&project_id={{ report.filters.project_id }}&house_id={{ report.filters.house_id }}&rooms={{ report.filters.rooms }}&area_group={{ report.filters.area_group }}&status_filter={{ report.filters.status_filter }}&view=current">Текущий срез</a>
+      <a class="local-tab {% if report.is_history_view %}local-tab-active{% endif %}" href="/dashboard/price-dynamics?period={{ report.filters.period }}&granularity={{ report.filters.granularity }}&developer_id={{ report.filters.developer_id }}&project_id={{ report.filters.project_id }}&house_id={{ report.filters.house_id }}&rooms={{ report.filters.rooms }}&area_group={{ report.filters.area_group }}&status_filter={{ report.filters.status_filter }}&view=history">История изменений</a>
+    </nav>
+
+    {% if not report.has_any_data %}
+      <section class="empty">
+        <h2>Недостаточно истории для расчета динамики</h2>
+        <p>Динамика появится после накопления нескольких срезов.</p>
+      </section>
+    {% elif not report.has_history %}
+      <section class="empty">
+        <h2>Недостаточно истории для расчета динамики</h2>
+        <p>Динамика появится после следующего обновления данных.</p>
+      </section>
+    {% else %}
+      <section class="metrics dashboard-kpis">
+        <div><span>{% if report.kpis.avg_change is not none %}{{ "{:+,.0f}".format(report.kpis.avg_change).replace(",", " ") }}{% else %}н/д{% endif %}</span><p>среднее изм. ₽/м²</p></div>
+        <div><span>{% if report.kpis.median_change is not none %}{{ "{:+,.0f}".format(report.kpis.median_change).replace(",", " ") }}{% else %}н/д{% endif %}</span><p>медианное изм. ₽/м²</p></div>
+        <div><span>{{ report.kpis.growth_groups }}</span><p>квартир выросло</p></div>
+        <div><span>{{ report.kpis.decline_groups }}</span><p>квартир снизилось</p></div>
+        <div><span>{{ report.kpis.new_groups }}</span><p>новые квартиры</p></div>
+        <div><span>{{ report.kpis.gone_groups }}</span><p>ушедшие квартиры</p></div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head"><h2>Ключевые выводы</h2></div>
+          <div class="insight-list">
+            {% for insight in report.insights %}
+              <p>{{ insight }}</p>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>КССК vs конкуренты</h2></div>
+          <div class="fact-list">
+            <div><span>Медиана КССК</span><strong>{% if report.kssk_vs_competitors.kssk_price is not none %}{{ "{:,.0f}".format(report.kssk_vs_competitors.kssk_price).replace(",", " ") }} ₽/м²{% else %}н/д{% endif %}</strong></div>
+            <div><span>Медиана конкурентов</span><strong>{% if report.kssk_vs_competitors.competitors_price is not none %}{{ "{:,.0f}".format(report.kssk_vs_competitors.competitors_price).replace(",", " ") }} ₽/м²{% else %}н/д{% endif %}</strong></div>
+            <div><span>Изменение КССК</span><strong>{% if report.kssk_vs_competitors.kssk_change is not none %}{{ "{:+,.0f}".format(report.kssk_vs_competitors.kssk_change).replace(",", " ") }} ₽/м²{% else %}н/д{% endif %}</strong></div>
+            <div><span>Изменение конкурентов</span><strong>{% if report.kssk_vs_competitors.competitors_change is not none %}{{ "{:+,.0f}".format(report.kssk_vs_competitors.competitors_change).replace(",", " ") }} ₽/м²{% else %}н/д{% endif %}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      {% if report.is_history_view %}
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Динамика медианной цены за м²</h2>
+            <span>КССК, конкуренты и рынок</span>
+          </div>
+          <div class="price-chart">
+            {% for point in report.market_series %}
+              <div class="price-chart-row">
+                <span>{{ point.label }}</span>
+                <div class="price-chart-lines">
+                  {% if point.own is not none %}<i class="line-own" style="width: {{ [100, point.own / 250000 * 100]|min }}%;"></i>{% endif %}
+                  {% if point.competitors is not none %}<i class="line-competitors" style="width: {{ [100, point.competitors / 250000 * 100]|min }}%;"></i>{% endif %}
+                  {% if point.market is not none %}<i class="line-market" style="width: {{ [100, point.market / 250000 * 100]|min }}%;"></i>{% endif %}
+                </div>
+                <strong>{% if point.market is not none %}{{ "{:,.0f}".format(point.market).replace(",", " ") }}{% else %}н/д{% endif %}</strong>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="chart-legend"><span class="legend-own">КССК</span><span class="legend-competitors">Конкуренты</span><span class="legend-market">Рынок</span></div>
+        </section>
+      {% endif %}
+
+      {% if report.is_history_view and report.developer_building_series %}
+        <section class="panel">
+          <div class="panel-head"><h2>Динамика цены за м² по домам</h2></div>
+          <div class="dashboard-bars">
+            {% for row in report.developer_building_series %}
+              <div class="dashboard-bar-row">
+                <span>{{ row.building }}</span>
+                <div><i style="width: {{ [100, (row['values']|last or 0) / 250000 * 100]|min }}%;"></i></div>
+                <strong>{% if row['values']|last is not none %}{{ "{:,.0f}".format(row['values']|last).replace(",", " ") }}{% else %}н/д{% endif %}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>{% if report.is_history_view %}История динамики{% else %}Текущий срез цен{% endif %}</h2>
+          <span>{% if report.latest_period %}Последняя выгрузка: {{ report.latest_period.label }}{% endif %}</span>
+        </div>
+        {% if not report.is_history_view and report.table_developers|length > 1 %}
+          <nav class="local-tabs table-local-tabs" aria-label="Застройщики в таблице" id="price-dynamics-table-tabs">
+            {% for developer in report.table_developers %}
+              <button
+                class="local-tab {% if loop.first %}local-tab-active{% endif %}"
+                type="button"
+                data-table-developer-tab="{{ developer.id }}"
+              >{{ developer.name }}</button>
+            {% endfor %}
+          </nav>
+        {% endif %}
+        <div class="dashboard-table-wrap price-dynamics-table-wrap">
+          <table class="analytics-table price-dynamics-table">
+            <thead>
+              {% if report.is_history_view %}
+                <tr>
+                  <th class="sticky-col">Застройщик</th>
+                  <th>Проект</th>
+                  <th>Дом</th>
+                  <th>Площадь</th>
+                  {% for period in report.periods %}
+                    <th>{{ period.label }}</th>
+                  {% endfor %}
+                </tr>
+              {% else %}
+                <tr>
+                  <th class="sticky-col">Проект</th>
+                  <th>Дом</th>
+                  <th>Площадь</th>
+                  <th>Текущая цена, ₽/м²</th>
+                  <th>Изменение</th>
+                  <th>Статус</th>
+                  <th>Квартир</th>
+                  <th></th>
+                </tr>
+              {% endif %}
+            </thead>
+            <tbody id="price-dynamics-table-body">
+              {% for row in report.rows %}
+                <tr {% if not report.is_history_view %}data-table-developer-row="{{ row.developer_id }}"{% endif %}>
+                  <td class="sticky-col">{% if report.is_history_view %}{{ row.project }}{% else %}{{ row.project_full }}{% endif %}</td>
+                  <td>{% if report.is_history_view %}{{ row.building }}{% else %}{{ row.building_full }}{% endif %}</td>
+                  <td>{{ row.area_group }}</td>
+                  {% if report.is_history_view %}
+                    {% for cell in row.cells %}
+                      <td class="status-{{ cell.status }}">
+                        {% if cell.value is not none %}
+                          <strong>{{ "{:,.0f}".format(cell.value).replace(",", " ") }}</strong>
+                          {% if cell.change_abs is not none %}
+                            <span>{{ "{:+,.0f}".format(cell.change_abs).replace(",", " ") }}</span>
+                          {% elif cell.status == 'new' %}
+                            <span>новое</span>
+                          {% endif %}
+                        {% elif cell.status == 'gone' %}
+                          <span>ушло</span>
+                        {% else %}
+                          <span>—</span>
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  {% else %}
+                    <td class="status-{{ row.current.status }}">
+                      {% if row.current.value is not none %}<strong>{{ "{:,.0f}".format(row.current.value).replace(",", " ") }}</strong>{% else %}<span>—</span>{% endif %}
+                    </td>
+                    <td class="status-{{ row.current.status }}">
+                      {% if row.current.change_abs is not none %}
+                        <strong>{{ "{:+,.0f}".format(row.current.change_abs).replace(",", " ") }}</strong>
+                        {% if row.current.change_pct is not none %}<span>{{ "{:+.1f}".format(row.current.change_pct) }}%</span>{% endif %}
+                      {% elif row.current.status == 'new' %}
+                        <span>новое</span>
+                      {% elif row.current.status == 'gone' %}
+                        <span>ушло</span>
+                      {% else %}
+                        <span>—</span>
+                      {% endif %}
+                    </td>
+                    <td class="status-{{ row.current.status }}">
+                      {% if row.current.status == 'growth' %}<span>повышение</span>
+                      {% elif row.current.status == 'decline' %}<span>понижение</span>
+                      {% elif row.current.status == 'new' %}<span>новое</span>
+                      {% elif row.current.status == 'gone' %}<span>ушло</span>
+                      {% elif row.current.status == 'stable' %}<span>без изменений</span>
+                      {% else %}<span>—</span>{% endif %}
+                    </td>
+                    <td>{% if row.current.value is not none %}{{ row.current.apartments_count or "" }}{% else %}—{% endif %}</td>
+                    <td>
+                      <a href="/dashboard/price-dynamics?period={{ report.filters.period|urlencode }}&granularity={{ report.filters.granularity|urlencode }}&developer_id={{ row.developer_id|urlencode }}&project_id={{ row.project_id|urlencode }}&house_id={{ row.house_id|urlencode }}&rooms={{ report.filters.rooms|urlencode }}&area_group={{ row.area_group_key|urlencode }}&status_filter=all&view=history">Динамика</a>
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head"><h2>Сводка по застройщикам</h2></div>
+          <div class="dashboard-table-wrap">
+            <table class="analytics-table">
+              <thead><tr><th>Застройщик</th><th>Квартир</th><th>Медиана ₽/м²</th><th>Изм. ₽/м²</th><th>Рост</th><th>Снижение</th><th>Новые</th><th>Ушли</th></tr></thead>
+              <tbody>
+                {% for row in report.developer_summary %}
+                  <tr>
+                    <td>{{ row.developer }}</td>
+                    <td>{{ row.groups_count }}</td>
+                    <td>{% if row.median_price_per_sqm is not none %}{{ "{:,.0f}".format(row.median_price_per_sqm).replace(",", " ") }}{% else %}н/д{% endif %}</td>
+                    <td>{% if row.median_change_abs is not none %}{{ "{:+,.0f}".format(row.median_change_abs).replace(",", " ") }}{% else %}н/д{% endif %}</td>
+                    <td>{{ row.growth_groups_count }}</td>
+                    <td>{{ row.decline_groups_count }}</td>
+                    <td>{{ row.new_groups_count }}</td>
+                    <td>{{ row.gone_groups_count }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Топ домов по изменению</h2></div>
+          <div class="ranking">
+            <h3>Рост</h3>
+            {% for row in report.top_growth_buildings %}
+              <div class="rank-row"><span>{{ row.developer }} · {{ row.building }}</span><strong>{{ "{:+,.0f}".format(row.median_change_abs).replace(",", " ") }}</strong></div>
+            {% endfor %}
+            <h3>Снижение</h3>
+            {% for row in report.top_decline_buildings %}
+              <div class="rank-row"><span>{{ row.developer }} · {{ row.building }}</span><strong>{{ "{:+,.0f}".format(row.median_change_abs).replace(",", " ") }}</strong></div>
+            {% endfor %}
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Сводка по домам</h2></div>
+        <div class="dashboard-table-wrap">
+          <table class="analytics-table">
+            <thead><tr><th>Застройщик</th><th>Проект</th><th>Дом</th><th>Квартир</th><th>Медиана ₽/м²</th><th>Изм. ₽/м²</th><th>Изм. %</th><th>Рост</th><th>Снижение</th><th>Новые</th><th>Ушли</th></tr></thead>
+            <tbody>
+              {% for row in report.building_summary %}
+                <tr>
+                  <td>{{ row.developer }}</td>
+                  <td>{{ row.project }}</td>
+                  <td>{{ row.building }}</td>
+                  <td>{{ row.groups_count }}</td>
+                  <td>{% if row.median_price_per_sqm is not none %}{{ "{:,.0f}".format(row.median_price_per_sqm).replace(",", " ") }}{% else %}н/д{% endif %}</td>
+                  <td>{% if row.median_change_abs is not none %}{{ "{:+,.0f}".format(row.median_change_abs).replace(",", " ") }}{% else %}н/д{% endif %}</td>
+                  <td>{% if row.median_change_pct is not none %}{{ "{:+.1f}".format(row.median_change_pct) }}%{% else %}н/д{% endif %}</td>
+                  <td>{{ row.growth_groups_count }}</td>
+                  <td>{{ row.decline_groups_count }}</td>
+                  <td>{{ row.new_groups_count }}</td>
+                  <td>{{ row.gone_groups_count }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  {% if not report.is_history_view and report.table_developers|length > 1 %}
+    <script>
+      (function () {
+        const tabs = Array.from(document.querySelectorAll("[data-table-developer-tab]"));
+        const rows = Array.from(document.querySelectorAll("[data-table-developer-row]"));
+        if (!tabs.length || !rows.length) return;
+
+        const applyDeveloper = (developerId) => {
+          tabs.forEach((tab) => {
+            const active = tab.dataset.tableDeveloperTab === developerId;
+            tab.classList.toggle("local-tab-active", active);
+          });
+          rows.forEach((row) => {
+            row.hidden = row.dataset.tableDeveloperRow !== developerId;
+          });
+        };
+
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => applyDeveloper(tab.dataset.tableDeveloperTab));
+        });
+
+        applyDeveloper(tabs[0].dataset.tableDeveloperTab);
+      })();
+    </script>
+  {% endif %}
+  {% include "_refresh_script.html" %}
+</body>
+</html>

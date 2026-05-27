@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>
+    {% if report.selected_developer %}
+      Планировки — {{ report.selected_developer.name }}
+    {% else %}
+      Все планировки рынка
+    {% endif %}
+  </title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% if report.selected_developer %}
+    {% if report.selected_developer.id == 'kssk' %}
+      {% set header_active_section = 'compare' %}
+    {% else %}
+      {% set header_active_section = 'developer_detail' %}
+    {% endif %}
+    {% set header_breadcrumb = report.city ~ ' · Планировки · ' ~ report.selected_developer.name %}
+    {% set header_title = 'Планировки — ' ~ report.selected_developer.name %}
+  {% else %}
+    {% set header_active_section = 'layouts' %}
+    {% set header_breadcrumb = report.city ~ ' · Планировки' %}
+    {% set header_title = 'Планировки' %}
+  {% endif %}
+  {% set show_export = true %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% set run = report.latest_run %}
+    {% set filters = report.filters %}
+    {% if report.selected_developer %}
+      {% if report.selected_developer.id == 'kssk' %}
+        <nav class="local-tabs" aria-label="Навигация по КССК">
+          <a class="local-tab" href="/compare">Обзор</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Аналитика</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        </nav>
+      {% else %}
+        <nav class="local-tabs" aria-label="Навигация по застройщику">
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Обзор</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        </nav>
+      {% endif %}
+    {% endif %}
+    <section class="status-band {% if run and run.status == 'error' %}error{% endif %}">
+      <div>
+        <span class="label">Последнее обновление</span>
+        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
+      </div>
+      <div>
+        <span class="label">Статус</span>
+        <strong>{{ run.status if run else 'нет данных' }}</strong>
+      </div>
+      <div class="status-message">{{ run.message if run and run.message else 'Нажмите «Обновить данные», чтобы собрать каталог.' }}</div>
+    </section>
+
+    <section class="metrics">
+      <div><span>{{ report.totals.projects }}</span><p>проектов</p></div>
+      <div><span>{{ report.totals.houses }}</span><p>домов</p></div>
+      <div><span>{{ report.totals.flats }}</span><p>квартир собрано</p></div>
+      <div><span>{{ report.totals.layout_groups }}</span><p>типовых планировок</p></div>
+    </section>
+
+    <form
+      class="filters-panel filters-panel-compact"
+      method="get"
+      action="{% if report.selected_developer %}/developers/{{ report.selected_developer.id }}/layouts{% else %}/layouts{% endif %}"
+    >
+      <label>Проект
+        <select name="project_id">
+          <option value="">Все проекты</option>
+          {% for project in filters.project_options %}
+            <option value="{{ project.id }}" {% if filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Период анализа
+        <select name="period_days">
+          {% for days in [7, 14, 30, 60, 90] %}
+            <option value="{{ days }}" {% if filters.period_days == days %}selected{% endif %}>{{ days }} дней</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Комнатность
+        <select name="rooms">
+          <option value="">Все форматы</option>
+          {% for room in filters.room_options %}
+            <option value="{{ room.value }}" {% if filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    {% if not report.projects %}
+      <section class="empty">
+        <h2>Данных пока нет</h2>
+        <p>Запустите обновление, чтобы собрать квартиры и построить отчет.</p>
+      </section>
+    {% endif %}
+
+    {% for project in report.projects %}
+      <section class="project">
+        <h2>{{ project.project_name }}</h2>
+        {% for house in project.houses %}
+          <article class="house">
+            <div class="house-head">
+              <div>
+                <p class="eyebrow">Дом</p>
+                <h3>{{ house.house_name }}</h3>
+              </div>
+              <div class="house-stats">
+                <span>{{ house.total_flats }} квартир</span>
+                <span>{{ house.total_layouts }} планировок</span>
+                {% if house.has_enough_sample %}
+                  <strong>{{ house.flats_per_layout }} кв./планировку</strong>
+                {% else %}
+                  <strong>мало данных</strong>
+                {% endif %}
+              </div>
+            </div>
+
+            {% for room in house.rooms %}
+              <div class="room-section">
+                <div class="room-head">
+                  <h4>{{ room.rooms_label }}</h4>
+                  <div class="room-actions">
+                    <span>{{ room.total_flats }} квартир · {{ room.total_layouts }} типовых планировок · {{ room.flats_per_layout }} кв./план.</span>
+                    <span class="merge-status" data-merge-status="{{ house.house_id }}::{{ room.rooms }}">Ничего не выбрано</span>
+                    <button
+                      class="button ghost small merge-button"
+                      type="button"
+                      data-house-id="{{ house.house_id }}"
+                      data-rooms="{{ room.rooms }}"
+                      disabled
+                    >Объединить выбранные</button>
+                  </div>
+                </div>
+
+                <div class="layouts-grid">
+                  {% for group in room.groups %}
+                    <details
+                      class="layout-card {% if group.is_manual_merge %}manual{% endif %}"
+                      open
+                      data-house-id="{{ house.house_id }}"
+                      data-rooms="{{ room.rooms }}"
+                      data-group-key="{{ group.group_key|e }}"
+                      data-layout-title="{{ project.project_name }} · {{ house.house_name }} · {{ room.rooms_label }} · Планировка №{{ group.layout_no }}"
+                    >
+                      <summary>
+                        <button
+                          class="layout-select"
+                          type="button"
+                          aria-pressed="false"
+                          aria-label="Выбрать планировку"
+                          data-house-id="{{ house.house_id }}"
+                          data-rooms="{{ room.rooms }}"
+                          data-group-key="{{ group.group_key|e }}"
+                        >✓</button>
+                        <button
+                          class="layout-image"
+                          type="button"
+                          data-full-image="{{ group.local_image_url or group.representative_image_url }}"
+                          data-image-title="{{ project.project_name }} · {{ house.house_name }} · {{ room.rooms_label }} · Планировка №{{ group.layout_no }}"
+                        >
+                          <img src="{{ group.local_image_url or group.representative_image_url }}" alt="Планировка №{{ group.layout_no }}">
+                        </button>
+                        <div class="layout-summary">
+                          <h5>Планировка №{{ group.layout_no }}</h5>
+                          {% if report.selected_developer %}
+                            <a class="layout-link" href="/developers/{{ report.selected_developer.id }}/layouts/{{ group.group_id }}">Открыть страницу</a>
+                          {% else %}
+                            <a class="layout-link" href="/layouts/{{ group.group_id }}">Открыть страницу</a>
+                          {% endif %}
+                          {% if group.is_manual_merge %}
+                            <div class="manual-badge">
+                              <span>ручное объединение</span>
+                              {% for merge_id in group.manual_merge_ids %}
+                                <button class="link-button undo-merge" type="button" data-merge-id="{{ merge_id }}">отменить</button>
+                              {% endfor %}
+                            </div>
+                          {% endif %}
+                          <p>{{ group.flat_count }} квартир</p>
+                          {% if group.tags %}
+                            <div class="tag-row">
+                              {% for tag in group.tags %}
+                                <span>{{ tag.name }}</span>
+                              {% endfor %}
+                            </div>
+                          {% endif %}
+                          <div class="shares">
+                            <span>{{ group.share_of_house }}% от дома</span>
+                            <span>{{ group.metrics.share_of_project }}% от проекта</span>
+                            <span>{{ group.share_of_room }}% в комнатности</span>
+                          </div>
+                          <div class="mini-facts">
+                            <span>{{ group.metrics.median_area }} м²</span>
+                            <span>{{ "{:,.0f}".format(group.metrics.median_price).replace(",", " ") }} ₽</span>
+                            <span>{{ "{:,.0f}".format(group.metrics.median_price_per_sqm).replace(",", " ") }} ₽/м²</span>
+                          </div>
+                        </div>
+                      </summary>
+
+                      <div class="flat-table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Код</th>
+                              <th>Площадь</th>
+                              <th>Этаж</th>
+                              <th>Цена</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for flat in group.flats %}
+                              <tr>
+                                <td><a href="{{ flat.url }}" target="_blank" rel="noreferrer">{{ flat.code }}</a></td>
+                                <td>{{ flat.area or '' }} м²</td>
+                                <td>{{ flat.floor or '' }}</td>
+                                <td>{% if flat.price %}{{ "{:,.0f}".format(flat.price).replace(",", " ") }} ₽{% endif %}</td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+          </article>
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </main>
+
+  <div class="image-modal" id="imageModal" hidden>
+    <button class="image-modal-backdrop" type="button" aria-label="Закрыть"></button>
+    <div class="image-modal-panel" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
+      <div class="image-modal-head">
+        <h2 id="imageModalTitle">Планировка</h2>
+        <button class="image-modal-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="image-modal-body">
+        <img id="imageModalImg" src="" alt="">
+      </div>
+    </div>
+  </div>
+
+  <div class="confirm-modal" id="mergeConfirmModal" hidden>
+    <button class="confirm-modal-backdrop" type="button" aria-label="Закрыть"></button>
+    <div class="confirm-modal-panel" role="dialog" aria-modal="true" aria-labelledby="mergeConfirmTitle">
+      <div class="confirm-modal-head">
+        <h2 id="mergeConfirmTitle">Подтвердите объединение</h2>
+      </div>
+      <div class="confirm-modal-body">
+        <p id="mergeConfirmText">Объединить выбранные планировки?</p>
+      </div>
+      <div class="confirm-modal-actions">
+        <button class="button ghost" id="mergeConfirmCancel" type="button">Отмена</button>
+        <button class="button" id="mergeConfirmAccept" type="button">Объединить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    const toast = document.getElementById('toast');
+    const imageModal = document.getElementById('imageModal');
+    const imageModalImg = document.getElementById('imageModalImg');
+    const imageModalTitle = document.getElementById('imageModalTitle');
+    const mergeConfirmModal = document.getElementById('mergeConfirmModal');
+    const mergeConfirmText = document.getElementById('mergeConfirmText');
+    const mergeConfirmAccept = document.getElementById('mergeConfirmAccept');
+    const mergeConfirmCancel = document.getElementById('mergeConfirmCancel');
+    let toastTimer = null;
+    let mergeConfirmResolver = null;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.hidden = false;
+      if (toastTimer) window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        toast.hidden = true;
+      }, 2600);
+    }
+
+    function roomKey(houseId, rooms) {
+      return `${houseId}::${rooms}`;
+    }
+
+    function selectedInRoom(houseId, rooms) {
+      return [...document.querySelectorAll('.layout-select[aria-pressed="true"]')]
+        .filter((button) => button.dataset.houseId === houseId && button.dataset.rooms === rooms);
+    }
+
+    function updateMergeControls() {
+      document.querySelectorAll('.merge-button').forEach((button) => {
+        const selected = selectedInRoom(button.dataset.houseId, button.dataset.rooms);
+        button.disabled = selected.length < 2;
+        const status = document.querySelector(`[data-merge-status="${roomKey(button.dataset.houseId, button.dataset.rooms)}"]`);
+        if (!status) return;
+        if (!selected.length) {
+          status.textContent = 'Ничего не выбрано';
+        } else if (selected.length === 1) {
+          status.textContent = 'Выбрана 1 планировка';
+        } else {
+          status.textContent = `Выбрано ${selected.length} планировки`;
+        }
+      });
+    }
+
+    document.querySelectorAll('.undo-merge').forEach((element) => {
+      element.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const undoButton = event.currentTarget;
+        undoButton.disabled = true;
+        try {
+          const response = await fetch(`/api/manual-merge/${undoButton.dataset.mergeId}`, { method: 'DELETE' });
+          const payload = await response.json();
+          showToast(payload.message || 'Готово');
+          if (payload.ok) window.location.reload();
+        } catch (error) {
+          showToast('Не удалось отменить объединение.');
+        } finally {
+          undoButton.disabled = false;
+        }
+      });
+    });
+
+    function closeImageModal() {
+      imageModal.hidden = true;
+      imageModalImg.src = '';
+      imageModalImg.alt = '';
+    }
+
+    function closeMergeConfirm(result) {
+      mergeConfirmModal.hidden = true;
+      if (mergeConfirmResolver) {
+        mergeConfirmResolver(result);
+        mergeConfirmResolver = null;
+      }
+    }
+
+    function confirmMerge(title) {
+      mergeConfirmText.textContent = `Объединить выбранные планировки? Представителем останется: ${title}`;
+      mergeConfirmModal.hidden = false;
+      return new Promise((resolve) => {
+        mergeConfirmResolver = resolve;
+      });
+    }
+
+    document.querySelectorAll('.layout-image').forEach((imageButton) => {
+      imageButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        imageModalTitle.textContent = imageButton.dataset.imageTitle || 'Планировка';
+        imageModalImg.src = imageButton.dataset.fullImage;
+        imageModalImg.alt = imageButton.dataset.imageTitle || 'Планировка';
+        imageModal.hidden = false;
+      });
+    });
+
+    document.querySelector('.image-modal-backdrop').addEventListener('click', closeImageModal);
+    document.querySelector('.image-modal-close').addEventListener('click', closeImageModal);
+    document.querySelector('.confirm-modal-backdrop').addEventListener('click', () => closeMergeConfirm(false));
+    mergeConfirmCancel.addEventListener('click', () => closeMergeConfirm(false));
+    mergeConfirmAccept.addEventListener('click', () => closeMergeConfirm(true));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !imageModal.hidden) closeImageModal();
+      if (event.key === 'Escape' && !mergeConfirmModal.hidden) closeMergeConfirm(false);
+    });
+
+    document.addEventListener('click', async (event) => {
+      const selectButton = event.target.closest('.layout-select');
+      if (selectButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        const isSelected = selectButton.getAttribute('aria-pressed') === 'true';
+        selectButton.setAttribute('aria-pressed', isSelected ? 'false' : 'true');
+        selectButton.classList.toggle('selected', !isSelected);
+        updateMergeControls();
+        return;
+      }
+
+      const mergeButton = event.target.closest('.merge-button');
+      if (mergeButton) {
+        const selected = selectedInRoom(mergeButton.dataset.houseId, mergeButton.dataset.rooms);
+        if (selected.length < 2) {
+          showToast('Выберите минимум две планировки в одном блоке комнатности.');
+          updateMergeControls();
+          return;
+        }
+        const target = selected[0];
+        const sourceKeys = selected.slice(1).map((button) => button.dataset.groupKey);
+        const targetCard = target.closest('.layout-card');
+        const title = targetCard ? targetCard.dataset.layoutTitle : 'первая выбранная планировка';
+        if (!await confirmMerge(title)) return;
+        mergeButton.disabled = true;
+        try {
+          const response = await fetch('/api/manual-merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              target_group_key: target.dataset.groupKey,
+              source_group_keys: sourceKeys
+            })
+          });
+          const payload = await response.json();
+          showToast(payload.message || 'Готово');
+          if (payload.ok) window.location.reload();
+        } catch (error) {
+          showToast('Не удалось объединить планировки.');
+        } finally {
+          updateMergeControls();
+        }
+        return;
+      }
+
+    });
+
+    updateMergeControls();
+
+  </script>
+  {% include "_refresh_script.html" %}
+</body>
+</html>

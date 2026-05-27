@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ report.selected_developer.name if report.selected_developer else report.competitor }} — аналитика застройщика</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% set developer_name = report.selected_developer.name if report.selected_developer else report.competitor %}
+  {% if report.selected_developer and report.selected_developer.id == 'kssk' %}
+    {% set header_active_section = 'compare' %}
+  {% else %}
+    {% set header_active_section = 'developer_detail' %}
+  {% endif %}
+  {% set header_breadcrumb = report.city ~ ' · Застройщики · ' ~ developer_name %}
+  {% set header_title = developer_name %}
+  {% set show_export = true %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% set run = report.latest_run %}
+    {% set analytics = report.developer %}
+    {% set filters = report.filters %}
+    {% if report.selected_developer %}
+      <nav class="local-tabs" aria-label="Навигация по застройщику">
+        {% if report.selected_developer.id == 'kssk' %}
+          <a class="local-tab" href="/compare">Обзор</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}">Аналитика</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        {% else %}
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}">Обзор</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+    <section class="status-band {% if run and run.status == 'error' %}error{% endif %}">
+      <div>
+        <span class="label">Последнее обновление</span>
+        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
+      </div>
+      <div>
+        <span class="label">Статус</span>
+        <strong>{{ run.status if run else 'нет данных' }}</strong>
+      </div>
+      <div class="status-message">{{ run.message if run and run.message else 'Нажмите «Обновить данные», чтобы собрать каталог.' }}</div>
+    </section>
+
+    <section class="metrics metrics-six">
+      <div><span>{{ report.totals.projects }}</span><p>проектов</p></div>
+      <div><span>{{ report.totals.houses }}</span><p>домов в продаже</p></div>
+      <div><span>{{ report.totals.flats }}</span><p>квартир</p></div>
+      <div><span>{{ report.totals.layout_groups }}</span><p>типовых планировок</p></div>
+      <div><span>{{ analytics.avg_flats_per_layout }}</span><p>квартир на планировку</p></div>
+      <div><span>{{ analytics.top3_layout_share }}%</span><p>доля топ-3 планировок</p></div>
+    </section>
+
+    {% if report.selected_developer %}
+      <form class="filters-panel filters-panel-compact" method="get" action="/developers/{{ report.selected_developer.id }}">
+        <label>Проект
+          <select name="project_id">
+            <option value="">Все проекты</option>
+            {% for project in filters.project_options %}
+              <option value="{{ project.id }}" {% if filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Период анализа
+          <select name="period_days">
+            {% for days in [7, 14, 30, 60, 90] %}
+              <option value="{{ days }}" {% if filters.period_days == days %}selected{% endif %}>{{ days }} дней</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Комнатность
+          <select name="rooms">
+            <option value="">Все форматы</option>
+            {% for room in filters.room_options %}
+              <option value="{{ room.value }}" {% if filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button class="button ghost" type="submit">Применить</button>
+        </div>
+      </form>
+    {% endif %}
+
+    {% if not report.projects %}
+      <section class="empty">
+        <h2>Данных пока нет</h2>
+        <p>Запустите обновление, чтобы собрать квартиры {{ developer_name }} и построить аналитику.</p>
+      </section>
+    {% else %}
+      <section class="dashboard-grid">
+        <article class="panel panel-wide">
+          <div class="panel-head">
+            <h2>Ключевые выводы</h2>
+            <span>{{ analytics.top3_layout_share }}% предложения приходится на топ-3 планировки</span>
+          </div>
+          <div class="insight-list">
+            {% for insight in analytics.insights %}
+              <p>{{ insight }}</p>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="panel" id="prices">
+          <div class="panel-head">
+            <h2>Цена и площадь</h2>
+          </div>
+          <div class="fact-list">
+            <div><span>Средняя цена</span><strong>{{ "{:,.0f}".format(analytics.avg_price).replace(",", " ") }} ₽</strong></div>
+            <div><span>Медианная цена</span><strong>{{ "{:,.0f}".format(analytics.median_price).replace(",", " ") }} ₽</strong></div>
+            <div><span>Диапазон цен</span><strong>{{ "{:,.0f}".format(analytics.min_price).replace(",", " ") }}–{{ "{:,.0f}".format(analytics.max_price).replace(",", " ") }} ₽</strong></div>
+            <div><span>Средняя площадь</span><strong>{{ analytics.avg_area }} м²</strong></div>
+            <div><span>Медианная площадь</span><strong>{{ analytics.median_area }} м²</strong></div>
+            <div><span>Средняя цена за м²</span><strong>{{ "{:,.0f}".format(analytics.avg_price_per_sqm).replace(",", " ") }} ₽</strong></div>
+            <div><span>Медианная цена за м²</span><strong>{{ "{:,.0f}".format(analytics.median_price_per_sqm).replace(",", " ") }} ₽</strong></div>
+            <div><span title="HHI = сумма квадратов долей планировок. Формат 0–1: чем выше, тем сильнее концентрация.">HHI по планировкам</span><strong>{{ analytics.hhi }}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="metrics metrics-six" id="dynamics">
+        <div><span>{{ analytics.top1_layout_share }}%</span><p title="Доля самой массовой типовой планировки">доля топ-1</p></div>
+        <div><span>{{ analytics.top5_layout_share }}%</span><p>доля топ-5</p></div>
+        <div><span>{{ analytics.dynamics.appeared }}</span><p>новых за период</p></div>
+        <div><span>{{ analytics.dynamics.gone_from_exposure }}</span><p>ушло из экспозиции</p></div>
+        <div><span>{{ analytics.dynamics.price_changed }}</span><p>изменили цену</p></div>
+        <div><span>{{ "{:,.0f}".format(analytics.dynamics.avg_price_change).replace(",", " ") }} ₽</span><p>среднее изменение цены</p></div>
+      </section>
+
+      <section class="panel" id="projects">
+        <div class="panel-head">
+          <h2>Проекты</h2>
+          <span>Основное сравнение вариативности считаем на уровне проекта</span>
+        </div>
+        <div class="project-bars">
+          {% for project in analytics.project_summary %}
+            <div class="bar-row">
+              <div class="bar-label">
+                <strong>{{ project.project_name }}</strong>
+                <span>{{ project.total_flats }} квартир · {{ project.total_layouts }} планировок · {{ project.flats_per_layout }} кв./план. · топ-3 {{ project.top3_layout_share }}%</span>
+              </div>
+              <div class="bar-track"><div style="width: {{ project.share }}%"></div></div>
+              <div class="bar-value">{{ project.share }}%</div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Комнатность</h2>
+            <span>Структура предложения</span>
+          </div>
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Тип</th>
+                <th>Квартир</th>
+                <th>Доля</th>
+                <th>Квартир / планировку</th>
+                <th title="HHI внутри комнатности, формат 0–1">HHI</th>
+                <th>Средняя площадь</th>
+                <th>Медианная цена</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for room in analytics.room_summary %}
+                <tr>
+                  <td>{{ room.rooms_label }}</td>
+                  <td>{{ room.total_flats }}</td>
+                  <td>{{ room.share }}%</td>
+                  <td>{{ room.flats_per_layout }}</td>
+                  <td>{{ room.hhi }}</td>
+                  <td>{{ room.avg_area }} м²</td>
+                  <td>{{ "{:,.0f}".format(room.median_price).replace(",", " ") }} ₽</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Рейтинг домов</h2>
+            <span>Только дома, где в продаже от {{ analytics.min_house_sample }} квартир</span>
+          </div>
+          <div class="ranking">
+            <h3>Самые вариативные</h3>
+            {% for house in analytics.most_variable_houses %}
+              <div class="rank-row">
+                <span>{{ house.project_name }} · {{ house.house_name }}</span>
+                <strong>{{ house.flats_per_layout }} кв./план. · {{ house.total_flats }} кв.</strong>
+              </div>
+            {% endfor %}
+            {% if not analytics.most_variable_houses %}
+              <p class="muted">Недостаточно домов с выборкой от {{ analytics.min_house_sample }} квартир.</p>
+            {% endif %}
+            <h3>Самые однотипные</h3>
+            {% for house in analytics.least_variable_houses %}
+              <div class="rank-row">
+                <span>{{ house.project_name }} · {{ house.house_name }}</span>
+                <strong>{{ house.flats_per_layout }} кв./план. · {{ house.total_flats }} кв.</strong>
+              </div>
+            {% endfor %}
+            {% if not analytics.least_variable_houses %}
+              <p class="muted">Недостаточно домов с выборкой от {{ analytics.min_house_sample }} квартир.</p>
+            {% endif %}
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Сводная таблица проектов</h2>
+          <span>Для сравнения внутри застройщика</span>
+        </div>
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Проект</th>
+              <th>Домов</th>
+              <th>Квартир</th>
+              <th>Типовых планировок</th>
+              <th>Квартир / планировку</th>
+              <th>Доля топ-3</th>
+              <th title="Планировок на 100 квартир">Индекс вариативности</th>
+              <th title="HHI = сумма квадратов долей планировок. Формат 0–1">HHI</th>
+              <th>Средняя цена</th>
+              <th>Медианная цена</th>
+              <th>Цена за м²</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for project in analytics.project_summary %}
+              <tr>
+                <td>{{ project.project_name }}</td>
+                <td>{{ project.total_houses }}</td>
+                <td>{{ project.total_flats }}</td>
+                <td>{{ project.total_layouts }}</td>
+                <td>{{ project.flats_per_layout }}</td>
+                <td>{{ project.top3_layout_share }}%</td>
+                <td>{{ project.variability_ratio }}</td>
+                <td>{{ project.hhi }}</td>
+                <td>{{ "{:,.0f}".format(project.avg_price).replace(",", " ") }} ₽</td>
+                <td>{{ "{:,.0f}".format(project.median_price).replace(",", " ") }} ₽</td>
+                <td>{{ "{:,.0f}".format(project.avg_price_per_sqm).replace(",", " ") }} ₽</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    const toast = document.getElementById('toast');
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.hidden = false;
+    }
+  </script>
+  {% include "_refresh_script.html" %}
+</body>
+</html>

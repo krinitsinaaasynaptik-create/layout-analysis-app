@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сводный отчет по площадям</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% set header_active_section = 'dashboard' %}
+  {% set header_breadcrumb = 'Дашборд · Отчеты' %}
+  {% set header_title = 'Сводный отчет по площадям' %}
+  {% set show_export = true %}
+  {% set export_href = '/api/area-summary.xlsx?' ~ request.query_params %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    <nav class="local-tabs" aria-label="Отчеты дашборда">
+      <a class="local-tab local-tab-active" href="/dashboard">Сводный отчет по площадям</a>
+      <a class="local-tab" href="/dashboard/price-dynamics">Динамика цен по домам</a>
+    </nav>
+
+    <form class="filters-panel dashboard-filters" method="get" action="/dashboard">
+      <label>Режим отчета
+        <select name="mode">
+          <option value="current" {% if report.filters.mode == 'current' %}selected{% endif %}>Текущий срез</option>
+          <option value="monthly" {% if report.filters.mode == 'monthly' %}selected{% endif %}>По месяцам</option>
+        </select>
+      </label>
+      <label>Период
+        <select name="period">
+          <option value="3m" {% if report.filters.period == '3m' %}selected{% endif %}>Последние 3 месяца</option>
+          <option value="6m" {% if report.filters.period == '6m' %}selected{% endif %}>Последние 6 месяцев</option>
+          <option value="12m" {% if report.filters.period == '12m' %}selected{% endif %}>Последние 12 месяцев</option>
+          <option value="all" {% if report.filters.period == 'all' %}selected{% endif %}>Все время</option>
+        </select>
+      </label>
+      <label>Режим рынка
+        <select name="market_mode">
+          <option value="all" {% if report.filters.market_mode == 'all' %}selected{% endif %}>КССК + конкуренты</option>
+          <option value="competitors" {% if report.filters.market_mode == 'competitors' %}selected{% endif %}>Только конкуренты</option>
+          <option value="own" {% if report.filters.market_mode == 'own' %}selected{% endif %}>Только КССК</option>
+        </select>
+      </label>
+      <label>Застройщик
+        <select name="developer_id">
+          <option value="">Все застройщики</option>
+          {% for developer in report.filters.all_developer_options %}
+            <option value="{{ developer.id }}" {% if report.filters.developer_id == developer.id %}selected{% endif %}>{{ developer.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Проект
+        <select name="project_id">
+          <option value="">Все проекты</option>
+          {% for project in report.filters.project_options %}
+            <option value="{{ project.id }}" {% if report.filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Комнатность
+        <select name="rooms">
+          <option value="">Все форматы</option>
+          {% for room in report.filters.room_options %}
+            <option value="{{ room.value }}" {% if report.filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    {% if not report.has_data %}
+      <section class="empty">
+        <h2>Нет данных для выбранных фильтров</h2>
+        <p>Измените фильтры или запустите обновление данных.</p>
+      </section>
+    {% else %}
+      <section class="metrics dashboard-kpis">
+        <div><span>{{ report.current.market_total_count }}</span><p>всего квартир</p></div>
+        <div><span>{{ "{:,.0f}".format(report.current.market_total_sum).replace(",", " ") }} ₽</span><p>сумма предложения</p></div>
+        <div><span>{{ report.current.leader_count.name }}</span><p>{{ report.current.leader_count.value|int }} квартир</p></div>
+        <div><span>{{ report.current.leader_sum.name }}</span><p>{{ "{:,.0f}".format(report.current.leader_sum.value).replace(",", " ") }} ₽</p></div>
+        <div><span>{{ report.current.top_range.area_range }}</span><p>{{ report.current.top_range.count }} квартир</p></div>
+        <div><span>{% if report.current.kssk_count_share is not none %}{{ report.current.kssk_count_share }}%{% else %}н/д{% endif %}</span><p>доля КССК по количеству</p></div>
+      </section>
+
+      {% if report.warnings.missing_area or report.warnings.missing_price %}
+        <section class="warning-box">
+          {% if report.warnings.missing_area %}{{ report.warnings.missing_area }} квартир не попали в отчет, потому что у них не указана площадь.{% endif %}
+          {% if report.warnings.missing_price %} {{ report.warnings.missing_price }} квартир не попали в расчет суммы, потому что у них не указана цена.{% endif %}
+        </section>
+      {% endif %}
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head"><h2>Ключевые выводы</h2></div>
+          <div class="insight-list">
+            {% for insight in report.insights %}
+              <p>{{ insight }}</p>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Доля КССК</h2></div>
+          <div class="fact-list">
+            <div><span>По количеству</span><strong>{% if report.current.kssk_count_share is not none %}{{ report.current.kssk_count_share }}%{% else %}н/д{% endif %}</strong></div>
+            <div><span>По сумме</span><strong>{% if report.current.kssk_sum_share is not none %}{{ report.current.kssk_sum_share }}%{% else %}н/д{% endif %}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Сводная таблица по диапазонам площади</h2>
+          <span>Количество и сумма предложения</span>
+        </div>
+        <div class="dashboard-table-wrap">
+          <table class="analytics-table dashboard-summary-table">
+            <thead>
+              <tr>
+                <th class="sticky-col">Диапазон площади</th>
+                {% for developer in report.developers %}
+                  <th colspan="2">{{ developer.name }}</th>
+                {% endfor %}
+              </tr>
+              <tr>
+                <th class="sticky-col sticky-subhead"></th>
+                {% for developer in report.developers %}
+                  <th>Количество</th>
+                  <th>Сумма</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.current.wide_rows %}
+                <tr>
+                  <td class="sticky-col">{{ row.area_range }}</td>
+                  {% for cell in row.cells %}
+                    <td>{{ cell.count }}</td>
+                    <td>{{ "{:,.0f}".format(cell.sum).replace(",", " ") }} ₽</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+              <tr class="total-row">
+                <td class="sticky-col">{{ report.current.total_row.area_range }}</td>
+                {% for cell in report.current.total_row.cells %}
+                  <td>{{ cell.count }}</td>
+                  <td>{{ "{:,.0f}".format(cell.sum).replace(",", " ") }} ₽</td>
+                {% endfor %}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head"><h2>Количество квартир по диапазонам площади</h2></div>
+          <div class="dashboard-bars">
+            {% for row in report.current.charts.count %}
+              <div class="dashboard-bar-row">
+                <span>{{ row.area_range }}</span>
+                <div><i style="width: {{ row.width }}%;"></i></div>
+                <strong>{{ row.market }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Сумма предложения по диапазонам площади</h2></div>
+          <div class="dashboard-bars">
+            {% for row in report.current.charts.sum %}
+              <div class="dashboard-bar-row">
+                <span>{{ row.area_range }}</span>
+                <div><i style="width: {{ row.width }}%;"></i></div>
+                <strong>{{ "{:,.0f}".format(row.market).replace(",", " ") }} ₽</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>КССК vs конкуренты по диапазонам площади</h2></div>
+        <div class="dashboard-table-wrap">
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Диапазон</th><th>КССК квартир</th><th>Конкуренты квартир</th><th>Доля КССК</th>
+                <th>КССК сумма</th><th>Конкуренты сумма</th><th>Доля КССК по сумме</th>
+                <th>Медиана КССК, ₽/м²</th><th>Медиана конкурентов, ₽/м²</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.current.vs_rows %}
+                <tr>
+                  <td>{{ row.area_range }}</td>
+                  <td>{{ row.kssk_count }}</td>
+                  <td>{{ row.competitors_count }}</td>
+                  <td>{% if row.kssk_count_share is not none %}{{ row.kssk_count_share }}%{% else %}н/д{% endif %}</td>
+                  <td>{{ "{:,.0f}".format(row.kssk_sum).replace(",", " ") }} ₽</td>
+                  <td>{{ "{:,.0f}".format(row.competitors_sum).replace(",", " ") }} ₽</td>
+                  <td>{% if row.kssk_sum_share is not none %}{{ row.kssk_sum_share }}%{% else %}н/д{% endif %}</td>
+                  <td>{{ "{:,.0f}".format(row.kssk_median_price_per_sqm).replace(",", " ") if row.kssk_median_price_per_sqm else "—" }}</td>
+                  <td>{{ "{:,.0f}".format(row.competitors_median_price_per_sqm).replace(",", " ") if row.competitors_median_price_per_sqm else "—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% if report.filters.mode == 'monthly' %}
+        <section class="panel">
+          <div class="panel-head"><h2>Динамика по месяцам</h2></div>
+          {% if not report.monthly.has_dynamics %}
+            <div class="empty-state">Недостаточно истории для расчета динамики. Динамика появится после накопления нескольких срезов.</div>
+          {% else %}
+            <table class="analytics-table">
+              <thead><tr><th>Месяц</th><th>Квартир</th><th>Изменение</th><th>Сумма</th><th>Изменение суммы</th><th>Доля КССК</th></tr></thead>
+              <tbody>
+                {% for row in report.monthly.months %}
+                  <tr>
+                    <td>{{ row.month }}</td>
+                    <td>{{ row.market_count }}</td>
+                    <td>{{ row.count_change }}</td>
+                    <td>{{ "{:,.0f}".format(row.market_sum).replace(",", " ") }} ₽</td>
+                    <td>{{ "{:,.0f}".format(row.sum_change).replace(",", " ") }} ₽</td>
+                    <td>{% if row.kssk_count_share is not none %}{{ row.kssk_count_share }}%{% else %}н/д{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </section>
+      {% endif %}
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  {% include "_refresh_script.html" %}
+</body>
+</html>

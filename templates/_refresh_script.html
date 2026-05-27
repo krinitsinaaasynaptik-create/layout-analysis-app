@@ -1,0 +1,46 @@
+<script>
+  const refreshButton = document.getElementById('refreshButton');
+  const refreshTokenPanel = document.getElementById('refreshTokenPanel');
+  const objectivTokenInput = document.getElementById('objectivTokenInput');
+
+  function notifyRefresh(message) {
+    if (typeof showToast === 'function') {
+      showToast(message);
+      return;
+    }
+    const toast = document.getElementById('toast');
+    if (toast) {
+      toast.textContent = message;
+      toast.hidden = false;
+    }
+  }
+
+  if (refreshButton && refreshTokenPanel && objectivTokenInput) {
+    refreshButton.addEventListener('click', async () => {
+      if (refreshTokenPanel.hidden) {
+        refreshTokenPanel.hidden = false;
+        objectivTokenInput.focus();
+        notifyRefresh('Вставьте токен Объектива и нажмите «Обновить» еще раз.');
+        return;
+      }
+      refreshButton.disabled = true;
+      refreshButton.textContent = 'Обновляем...';
+      notifyRefresh('Сбор данных может занять несколько минут.');
+      try {
+        const response = await fetch('/api/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ objectiv_access_token: objectivTokenInput.value.trim() })
+        });
+        const payload = await response.json();
+        notifyRefresh(payload.message || 'Готово');
+        if (payload.ok) window.location.reload();
+      } catch (error) {
+        notifyRefresh('Не удалось обновить данные.');
+      } finally {
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Обновить';
+      }
+    });
+  }
+</script>

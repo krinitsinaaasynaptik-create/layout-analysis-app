@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сравнение с КССК</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+</head>
+<body>
+  {% set header_active_section = 'compare' %}
+  {% set header_breadcrumb = report.city ~ ' · Сравнение' %}
+  {% set header_title = 'Сравнение с КССК' %}
+  {% set show_export = true %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% set run = report.latest_run %}
+    {% set filters = report.filters %}
+    {% if report.own_developer %}
+      <nav class="local-tabs" aria-label="Навигация по КССК">
+        <a class="local-tab local-tab-active" href="/compare">Обзор</a>
+        <a class="local-tab" href="/developers/{{ report.own_developer.id }}">Аналитика</a>
+        <a class="local-tab" href="/developers/{{ report.own_developer.id }}/layouts">Планировки</a>
+      </nav>
+    {% endif %}
+    <section class="status-band {% if run and run.status == 'error' %}error{% endif %}">
+      <div>
+        <span class="label">Последнее обновление</span>
+        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
+      </div>
+      <div>
+        <span class="label">Фокус</span>
+        <strong>{{ report.header.subtitle if report.header else 'Сравнение с конкурентами' }}</strong>
+      </div>
+      <div class="status-message">{{ run.message if run and run.message else 'Обновите данные, чтобы построить сравнение КССК с конкурентным рынком.' }}</div>
+    </section>
+
+    <form class="filters-panel filters-panel-compact compare-filters" method="get" action="/compare">
+      <label>Проект КССК
+        <select name="own_project_id">
+          <option value="">Все проекты</option>
+          {% for project in filters.own_project_options %}
+            <option value="{{ project.id }}" {% if filters.own_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Конкурент
+        <select name="competitor_id">
+          <option value="">Все конкуренты</option>
+          {% for developer in filters.competitor_options %}
+            <option value="{{ developer.id }}" {% if filters.competitor_id == developer.id %}selected{% endif %}>{{ developer.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Проект конкурента
+        <select name="competitor_project_id">
+          <option value="">Все проекты</option>
+          {% for project in filters.competitor_project_options %}
+            <option value="{{ project.id }}" {% if filters.competitor_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Период анализа
+        <select name="period_days">
+          {% for days in [7, 14, 30, 60, 90] %}
+            <option value="{{ days }}" {% if filters.period_days == days %}selected{% endif %}>{{ days }} дней</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Комнатность
+        <select name="rooms">
+          <option value="">Все форматы</option>
+          {% for room in filters.room_options %}
+            <option value="{{ room.value }}" {% if filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    {% if report.empty_state %}
+      <section class="empty">
+        <h2>{{ report.empty_state.title }}</h2>
+        <p>{{ report.empty_state.text }}</p>
+      </section>
+    {% else %}
+      <section class="market-kpis">
+        {% for card in report.kpis %}
+          <article class="market-kpi">
+            <p class="market-kpi-label">{{ card.label }}</p>
+            <strong class="market-kpi-value">{{ card.value }}</strong>
+            <p class="market-kpi-meta">{{ card.meta }}</p>
+          </article>
+        {% endfor %}
+      </section>
+
+      <section class="dashboard-grid market-mid-grid">
+        <article class="panel panel-wide">
+          <div class="panel-head">
+            <h2>Главные отличия КССК</h2>
+            <span>{{ report.header.subtitle }}</span>
+          </div>
+          <div class="insight-stack">
+            {% for insight in report.insights %}
+              <article class="insight-card tone-{{ insight.tone }}">
+                <strong>{{ insight.title }}</strong>
+                <p>{{ insight.text }}</p>
+              </article>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Сильные стороны</h2>
+          </div>
+          <div class="insight-list">
+            {% for item in report.strengths %}
+              <p>{{ item }}</p>
+            {% endfor %}
+            {% if not report.strengths %}
+              <p class="muted">Явных преимуществ в текущей выборке не обнаружено.</p>
+            {% endif %}
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Риски</h2>
+          </div>
+          <div class="insight-list">
+            {% for item in report.risks %}
+              <p>{{ item }}</p>
+            {% endfor %}
+            {% if not report.risks %}
+              <p class="muted">Существенных рисков в текущей выборке не обнаружено.</p>
+            {% endif %}
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Структура предложения: КССК vs рынок</h2>
+        </div>
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Комнатность</th>
+              <th>КССК</th>
+              <th>Рынок</th>
+              <th>Разница</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.room_rows %}
+              <tr>
+                <td>{{ row.rooms_label }}</td>
+                <td>{{ row.own_count }} / {{ row.own_share }}%</td>
+                <td>{{ row.market_count }} / {{ row.market_share }}%</td>
+                <td>{{ row.share_diff }} п.п.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Цены: КССК vs рынок</h2>
+          </div>
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Комнатность</th>
+                <th>Цена за м² КССК</th>
+                <th>Цена за м² рынка</th>
+                <th>Медианный чек</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.price_rows %}
+                <tr>
+                  <td>{{ row.rooms_label }}</td>
+                  <td>{{ "{:,.0f}".format(row.own_median_pps).replace(",", " ") if row.own_median_pps else "—" }} ₽</td>
+                  <td>{{ "{:,.0f}".format(row.market_median_pps).replace(",", " ") if row.market_median_pps else "—" }} ₽</td>
+                  <td>{{ row.diff_pps }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Площади: КССК vs рынок</h2>
+          </div>
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Комнатность</th>
+                <th>КССК</th>
+                <th>Рынок</th>
+                <th>Разница</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.area_rows %}
+                <tr>
+                  <td>{{ row.rooms_label }}</td>
+                  <td>{{ row.own_median_area }} м²</td>
+                  <td>{{ row.market_median_area }} м²</td>
+                  <td>{{ row.diff_area }} м²</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Минимальный чек входа</h2>
+          </div>
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Комнатность</th>
+                <th>КССК</th>
+                <th>Рынок</th>
+                <th>Разница</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.entry_rows %}
+                <tr>
+                  <td>{{ row.rooms_label }}</td>
+                  <td>{{ "{:,.0f}".format(row.own_entry_price).replace(",", " ") if row.own_entry_price else "—" }} ₽</td>
+                  <td>{{ "{:,.0f}".format(row.market_entry_price).replace(",", " ") if row.market_entry_price else "—" }} ₽</td>
+                  <td>{{ "{:,.0f}".format(row.diff_entry).replace(",", " ") if row.diff_entry else "—" }} ₽</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Продуктовые ниши</h2>
+          </div>
+          <div class="insight-list">
+            {% for row in report.niche_rows %}
+              <p>{{ row.rooms_label }} {{ row.bucket }}: у конкурентов {{ row.market_count }} квартир, у КССК {{ row.own_count }}. Статус: {{ row.status }}.</p>
+            {% endfor %}
+            {% if not report.niche_rows %}
+              <p class="muted">Явных ниш по текущим фильтрам не обнаружено.</p>
+            {% endif %}
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Сводное сравнение</h2>
+        </div>
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Метрика</th>
+              <th>КССК</th>
+              <th>Рынок</th>
+              <th>Вывод</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.summary_rows %}
+              <tr>
+                <td>{{ row.metric }}</td>
+                <td>{{ row.own }}</td>
+                <td>{{ row.market }}</td>
+                <td>{{ row.conclusion }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  {% include "_refresh_script.html" %}
+</body>
+</html>
