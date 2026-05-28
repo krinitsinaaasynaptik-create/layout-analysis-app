@@ -8,6 +8,12 @@ class House:
     project_name: str
     house_id: str
     house_name: str
+    total_apartments: Optional[int] = None
+    commissioning_date: Optional[str] = None
+    actual_commissioning_date: Optional[str] = None
+    deal_apartments_count: Optional[int] = None
+    avg_deal_exposure_days: Optional[float] = None
+    sales_start_date: Optional[str] = None
 
 
 @dataclass(frozen=True)

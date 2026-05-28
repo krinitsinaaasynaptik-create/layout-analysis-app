@@ -6,6 +6,7 @@ import json
 import math
 import re
 from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from .analytics import metrics as m
@@ -31,6 +32,17 @@ ROOM_ORDER = {
 }
 
 MIN_HOUSE_SAMPLE = 10
+
+MARKET_AREA_RANGES = [
+    ("до 30,9 кв.м", None, 30.9),
+    ("31–40,9 кв.м", 31.0, 40.9),
+    ("41–50,9 кв.м", 41.0, 50.9),
+    ("51–60,9 кв.м", 51.0, 60.9),
+    ("61–70,9 кв.м", 61.0, 70.9),
+    ("71–80,9 кв.м", 71.0, 80.9),
+    ("81–90,9 кв.м", 81.0, 90.9),
+    ("свыше 91 кв.м", 91.0, None),
+]
 
 
 def build_report(
@@ -286,6 +298,10 @@ def build_report(
                 "avg_area": m.avg(flat["area"] for flat in house_flats),
                 "median_area": m.median(flat["area"] for flat in house_flats),
                 "avg_price_per_sqm": _avg_price_per_sqm(house_flats),
+                "median_price_per_sqm": m.median(
+                    flat.get("price_per_sqm") or m.price_per_sqm(flat.get("price"), flat.get("area"))
+                    for flat in house_flats
+                ),
                 "floor_distribution": _floor_distribution(house_flats),
                 "rooms": _group_by_rooms(group_payload),
             }
@@ -1063,7 +1079,7 @@ def _build_market_analytics(
         )
     room_summary = _room_summary(flats, groups)
     room_distribution = _room_distribution(room_summary, calc_mode)
-    area_distribution = _numeric_distribution(flats, key="area", label="м²", kind="area", calc_mode=calc_mode, groups=groups)
+    area_distribution, area_missing_count = _fixed_area_distribution(flats, calc_mode=calc_mode, groups=groups)
     price_distribution = _numeric_distribution(flats, key="price", label="₽", kind="price", calc_mode=calc_mode, groups=groups)
     dominant_room = max(room_distribution, key=lambda row: row["share"], default=None)
     variability_assessment = _variability_assessment(median_flats_per_layout)
@@ -1071,23 +1087,22 @@ def _build_market_analytics(
     decorated_projects = [
         _decorate_project(project, median_flats_per_layout, market_price_per_sqm, market_dynamics) for project in projects
     ]
-    project_cards = _market_project_cards(decorated_projects, median_flats_per_layout)
-    overview_insights = _market_overview_insights(
-        decorated_projects,
-        room_distribution,
-        market_dynamics,
-        median_flats_per_layout,
-        variability_assessment,
-    )
-    developer_rows = _market_developer_rows(
-        developers,
-        project_meta,
-        decorated_projects,
+    summary_rows = _market_summary_rows(
+        projects,
         all_flats,
-        groups,
         snapshots,
         apartment_snapshots,
         period_days,
+    )
+    active_house_count = sum(1 for project in projects for house in project.get("houses", []) if house.get("total_flats"))
+    competitors_count = len(
+        {
+            project.get("developer_id")
+            for project in projects
+            if project.get("developer_id")
+            and project.get("developer_id") != "kssk"
+            and project.get("developer_name") != OWN_COMPANY
+        }
     )
     return {
         "developers_count": len({project.get("developer_id") for project in projects if project.get("developer_id")}),
@@ -1104,11 +1119,6 @@ def _build_market_analytics(
             flat.get("price_per_sqm") or m.price_per_sqm(flat.get("price"), flat.get("area"))
             for flat in flats
         ),
-        "leaders_by_volume": sorted(projects, key=lambda project: project["total_flats"], reverse=True)[:5],
-        "leaders_by_variability": ranked_variability[:5],
-        "most_standardized": ranked_standardized[:5],
-        "most_expensive": sorted(projects, key=lambda project: project["avg_price_per_sqm"], reverse=True)[:5],
-        "most_affordable": sorted(projects, key=lambda project: project["entry_price"])[:5],
         "median_flats_per_layout": median_flats_per_layout,
         "comparisons": comparisons,
         "dynamics": market_dynamics,
@@ -1146,33 +1156,39 @@ def _build_market_analytics(
                 "tag": variability_assessment["label"],
             },
             {
-                "label": "Самый массовый формат",
-                "value": dominant_room["rooms_label"] if dominant_room else "Нет данных",
-                "meta": f"{_format_percent(dominant_room['share'])} предложения" if dominant_room else "",
+                "label": "Количество конкурентов",
+                "value": _format_int(competitors_count),
+                "meta": "Только застройщики с квартирами в продаже",
                 "tone": "default",
-                "helper": "Комнатность с наибольшей долей в текущем предложении.",
-                "tag": "Структура",
+                "helper": "Учитываются только конкуренты текущей выборки. КССК в этот показатель не входит.",
+                "tag": "Состав рынка",
             },
             {
-                "label": "Качество данных",
-                "value": health["label"],
-                "meta": health["description"],
-                "tone": health["tone"],
-                "helper": "Статус динамики учитывает долю квартир, ушедших из экспозиции, и полноту истории наблюдений.",
-                "tag": "Динамика",
+                "label": "Количество проектов",
+                "value": _format_int(len(projects)),
+                "meta": "Только проекты с активным предложением",
+                "tone": "default",
+                "helper": "Считаются только проекты, где сейчас есть квартиры в продаже.",
+                "tag": "Состав рынка",
+            },
+            {
+                "label": "Количество домов",
+                "value": _format_int(active_house_count),
+                "meta": "Только дома с активным предложением",
+                "tone": "default",
+                "helper": "Считаются только корпуса, где сейчас есть квартиры в продаже.",
+                "tag": "Состав рынка",
             },
         ],
-        "overview_insights": overview_insights,
         "health": health,
         "scatter": _scatter_payload(decorated_projects),
         "distributions": {
             "rooms": room_distribution,
             "area": area_distribution,
             "price": price_distribution,
+            "area_missing_count": area_missing_count,
         },
-        "focus_cards": project_cards,
-        "developer_rows": developer_rows,
-        "variability_table": decorated_projects,
+        "summary_rows": summary_rows,
         "selected_context": {
             "developer_name": selected_developer.get("name") if selected_developer else "",
             "project_name": selected_project.get("name") if selected_project else "",
@@ -1411,6 +1427,40 @@ def _room_distribution(room_summary: List[Dict[str, Any]], calc_mode: str) -> Li
     return distribution
 
 
+def _fixed_area_distribution(
+    flats: List[Dict[str, Any]],
+    *,
+    calc_mode: str,
+    groups: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], int]:
+    values = [flat.get("area") for flat in flats]
+    numbers = [float(value) for value in values if value]
+    missing_count = len([value for value in values if not value])
+    if not numbers:
+        return [], missing_count
+
+    counts = [0 for _ in MARKET_AREA_RANGES]
+    for value in numbers:
+        for index, (_label, lower, upper) in enumerate(MARKET_AREA_RANGES):
+            if lower is None and value <= upper:
+                counts[index] += 1
+                break
+            if upper is None and value >= lower:
+                counts[index] += 1
+                break
+            if lower is not None and upper is not None and lower <= value <= upper:
+                counts[index] += 1
+                break
+
+    total = sum(counts)
+    items = []
+    for index, (label, _lower, _upper) in enumerate(MARKET_AREA_RANGES):
+        count = counts[index]
+        share = m.percent(count, total)
+        items.append({"label": label, "count": count, "share": share, "width": share})
+    return items, missing_count
+
+
 def _numeric_distribution(
     flats: List[Dict[str, Any]],
     *,
@@ -1456,6 +1506,90 @@ def _numeric_distribution(
             }
         )
     return items
+
+
+def _market_summary_rows(
+    projects: List[Dict[str, Any]],
+    all_flats: List[Dict[str, Any]],
+    snapshots: List[Dict[str, Any]],
+    apartment_snapshots: List[Dict[str, Any]],
+    period_days: int,
+) -> List[Dict[str, Any]]:
+    house_rows: List[Dict[str, Any]] = []
+    for project in projects:
+        for house in project.get("houses", []):
+            if not house.get("total_flats"):
+                continue
+            house_rows.append(
+                {
+                    "developer_id": project.get("developer_id", ""),
+                    "developer_name": project.get("developer_name", ""),
+                    "project_id": project.get("project_id", ""),
+                    "project_name": project.get("project_name", ""),
+                    "house_id": house.get("house_id", ""),
+                    "house_name": house.get("house_name") or "—",
+                    "total_apartments": house.get("total_apartments"),
+                    "commissioning_date": house.get("commissioning_date"),
+                    "actual_commissioning_date": house.get("actual_commissioning_date"),
+                    "deal_apartments_count": house.get("deal_apartments_count"),
+                    "avg_deal_exposure_days": house.get("avg_deal_exposure_days"),
+                    "sales_start_date": house.get("sales_start_date"),
+                    "apartments_count": int(house.get("total_flats", 0) or 0),
+                    "layout_groups_count": int(house.get("total_layouts", 0) or 0),
+                    "flats_per_layout": float(house.get("flats_per_layout", 0) or 0),
+                    "median_price": float(house.get("median_price", 0) or 0),
+                    "median_price_per_sqm": float(house.get("median_price_per_sqm", 0) or 0),
+                }
+            )
+
+    house_median_variability = m.median(
+        row["flats_per_layout"] for row in house_rows if row.get("flats_per_layout")
+    )
+    history_map = _market_history_by_house(all_flats, snapshots, apartment_snapshots, period_days)
+
+    rows = []
+    for row in house_rows:
+        history = history_map.get(row["house_id"], {})
+        apartments_delta = _delta_from_history(row["apartments_count"], history.get("previous_available_count"))
+        layouts_delta = _delta_from_history(row["layout_groups_count"], history.get("previous_layout_groups_count"))
+        median_price_delta = _delta_from_history(row["median_price"], history.get("previous_median_price"))
+        variability_delta = round(row["flats_per_layout"] - house_median_variability, 2) if row.get("flats_per_layout") and house_median_variability else 0.0
+        commissioning = _market_commissioning_status(
+            planned_date=row.get("commissioning_date"),
+            actual_date=row.get("actual_commissioning_date"),
+            house_id=row.get("house_id"),
+        )
+        sellout = _market_sellout_status(
+            total_apartments=row.get("total_apartments"),
+            deal_apartments_count=row.get("deal_apartments_count"),
+            avg_deal_exposure_days=row.get("avg_deal_exposure_days"),
+            current_available=row["apartments_count"],
+            commissioning_date=row.get("commissioning_date"),
+            actual_commissioning_date=row.get("actual_commissioning_date"),
+            sales_start_date=row.get("sales_start_date"),
+            house_id=row.get("house_id"),
+        )
+        rows.append(
+            {
+                **row,
+                "developer_href": f"/developers/{row['developer_id']}",
+                "project_href": f"/developers/{row['developer_id']}?project_id={row['project_id']}",
+                "apartments_delta": apartments_delta,
+                "layouts_delta": layouts_delta,
+                "median_price_delta": median_price_delta,
+                "variability_delta": variability_delta,
+                "variability_label": _variability_delta_label(variability_delta),
+                "variability_tone": _delta_tone(variability_delta),
+                "commissioning_label": commissioning["label"],
+                "commissioning_sort": commissioning["sort_value"],
+                "commissioning_tooltip": commissioning["tooltip"],
+                "sellout_label": sellout["label"],
+                "sellout_tone": sellout["tone"],
+                "sellout_tooltip": sellout["tooltip"],
+                "sellout_sort": sellout["sort_value"],
+            }
+        )
+    return sorted(rows, key=lambda item: (item["developer_name"], item["project_name"], -item["apartments_count"], item["house_name"]))
 
 
 def _price_distribution(numbers: List[float], label: str, kind: str) -> List[Dict[str, Any]]:
@@ -1618,6 +1752,215 @@ def _market_project_cards(projects: List[Dict[str, Any]], market_median: float) 
             }
         )
     return cards
+
+
+def _market_history_by_house(
+    all_flats: List[Dict[str, Any]],
+    snapshots: List[Dict[str, Any]],
+    apartment_snapshots: List[Dict[str, Any]],
+    period_days: int,
+) -> Dict[str, Dict[str, Any]]:
+    if not snapshots:
+        return {}
+
+    snapshot_dates = {
+        snapshot["id"]: _parse_dt(snapshot.get("collected_at") or snapshot.get("created_at"))
+        for snapshot in snapshots
+    }
+    since = datetime.now() - timedelta(days=period_days)
+    period_snapshots = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot_dates.get(snapshot["id"]) and snapshot_dates[snapshot["id"]] >= since
+    ]
+    if len(period_snapshots) < 2:
+        return {}
+
+    ordered_snapshots = sorted(
+        period_snapshots,
+        key=lambda snapshot: snapshot_dates.get(snapshot["id"]) or datetime.min,
+    )
+    first_snapshot_id = ordered_snapshots[0]["id"]
+    last_snapshot_id = ordered_snapshots[-1]["id"]
+    period_snapshot_ids = {snapshot["id"] for snapshot in ordered_snapshots}
+    flat_meta_by_id = {flat["flat_id"]: flat for flat in all_flats if flat.get("flat_id")}
+
+    best_by_key: Dict[tuple[int, str], Dict[str, Any]] = {}
+    for row in apartment_snapshots:
+        if row["snapshot_id"] not in period_snapshot_ids:
+            continue
+        flat_meta = flat_meta_by_id.get(row["apartment_id"])
+        if not flat_meta or not flat_meta.get("house_id"):
+            continue
+        enriched = {
+            **_snapshot_row_with_identity(row, flat_meta),
+            "house_id": flat_meta.get("house_id", ""),
+        }
+        identity = str(enriched.get("identity_key") or enriched.get("apartment_id") or "")
+        key = (int(enriched["snapshot_id"]), identity)
+        current = best_by_key.get(key)
+        if current is None or _snapshot_status_rank(str(enriched.get("status") or "")) > _snapshot_status_rank(str(current.get("status") or "")):
+            best_by_key[key] = enriched
+
+    rows_by_house: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in best_by_key.values():
+        rows_by_house[str(row.get("house_id") or "")].append(row)
+
+    history: Dict[str, Dict[str, Any]] = {}
+    for house_id, rows in rows_by_house.items():
+        first_rows = [row for row in rows if row["snapshot_id"] == first_snapshot_id and row.get("status") == "in_sale"]
+        last_rows = [row for row in rows if row["snapshot_id"] == last_snapshot_id and row.get("status") == "in_sale"]
+        if not first_rows and not last_rows:
+            continue
+        history[house_id] = {
+            "previous_available_count": len(first_rows),
+            "current_available_count": len(last_rows),
+            "previous_layout_groups_count": len({row.get("layout_group_id") for row in first_rows if row.get("layout_group_id")}),
+            "current_layout_groups_count": len({row.get("layout_group_id") for row in last_rows if row.get("layout_group_id")}),
+            "previous_median_price": m.median(row.get("price") for row in first_rows),
+            "current_median_price": m.median(row.get("price") for row in last_rows),
+            "previous_median_price_per_sqm": m.median(row.get("price_per_sqm") for row in first_rows),
+            "current_median_price_per_sqm": m.median(row.get("price_per_sqm") for row in last_rows),
+        }
+    return history
+
+
+def _market_sellout_status(
+    *,
+    total_apartments: Any,
+    deal_apartments_count: Any,
+    avg_deal_exposure_days: Any,
+    current_available: int,
+    commissioning_date: Any,
+    actual_commissioning_date: Any,
+    sales_start_date: Any,
+    house_id: Any,
+) -> Dict[str, Any]:
+    total = int(total_apartments or 0)
+    is_objectiv_house = str(house_id or "").startswith("objectiv:")
+    if total <= 0 or current_available > total:
+        reason = (
+            "В шахматке Объектива не найдено общее количество квартир в доме."
+            if is_objectiv_house
+            else "Дом не сопоставлен с Объективом по названию проекта и номеру корпуса."
+        )
+        return {"label": "н/д", "tone": "muted", "tooltip": reason, "sort_value": -1}
+
+    current_deal_count = max(int(deal_apartments_count or 0), 0)
+    current_percent = m.percent(current_deal_count, total)
+    percent_label = _format_percent(current_percent)
+    base_lines = [
+        f"Всего квартир в доме: {total}",
+        f"Квартир со статусом «Сделка»: {current_deal_count}",
+        f"Вымываемость: {percent_label}",
+        "",
+        "Источник: Объектив, шахматка, статус «Сделка»",
+    ]
+    commission_dt = _parse_dt(commissioning_date)
+    if not commission_dt:
+        tooltip = "\n".join(
+            [
+                *base_lines[:3],
+                "",
+                "Дата ввода неизвестна, план продаж недоступен.",
+                "",
+                base_lines[-1],
+            ]
+        )
+        return {
+            "label": f"{percent_label} · дата ввода неизвестна",
+            "tone": "muted",
+            "tooltip": tooltip,
+            "sort_value": round(current_percent, 2),
+        }
+
+    sales_start_dt = _parse_dt(sales_start_date)
+    if not sales_start_dt:
+        tooltip = "\n".join(
+            [
+                *base_lines[:3],
+                "",
+                "Дата старта продаж: н/д",
+                f"Дата ввода: {_format_date(commission_dt)}",
+                "",
+                "Не найдена дата старта продаж в Объективе. План продаж недоступен.",
+            ]
+        )
+        return {
+            "label": f"{percent_label} · недостаточно данных",
+            "tone": "muted",
+            "tooltip": tooltip,
+            "sort_value": round(current_percent, 2),
+        }
+
+    total_months = _months_between(sales_start_dt, commission_dt)
+    elapsed_months = _months_between(sales_start_dt, datetime.now())
+    if total_months <= 0:
+        tooltip = "\n".join(
+            [
+                *base_lines[:3],
+                "",
+                f"Дата старта продаж: {_format_date(sales_start_dt)}",
+                f"Дата ввода: {_format_date(commission_dt)}",
+                "",
+                "Период между стартом продаж и вводом некорректен.",
+            ]
+        )
+        return {
+            "label": f"{percent_label} · недостаточно данных",
+            "tone": "muted",
+            "tooltip": tooltip,
+            "sort_value": round(current_percent, 2),
+        }
+
+    monthly_plan = total / total_months
+    expected_deals_to_date = min(float(total), max(0.0, monthly_plan * min(elapsed_months, total_months)))
+    expected_percent = m.percent(expected_deals_to_date, total)
+    status = "В норме" if current_deal_count >= expected_deals_to_date else "Отклонение"
+    tone = "positive" if current_deal_count >= expected_deals_to_date else "negative"
+    tooltip = "\n".join(
+        [
+            *base_lines[:3],
+            "",
+            f"Дата старта продаж: {_format_date(sales_start_dt)}",
+            f"Дата ввода: {_format_date(commission_dt)}",
+            f"План продаж: {_format_int(monthly_plan)} квартир/мес.",
+            f"Должно быть в сделке к текущей дате: {_format_int(expected_deals_to_date)} квартир ({_format_percent(expected_percent)})",
+            f"Фактически в сделке: {_format_int(current_deal_count)} квартир ({percent_label})",
+            f"Статус: {status}",
+            "",
+            base_lines[-1],
+        ]
+    )
+    return {
+        "label": f"{percent_label} · {status}",
+        "tone": tone,
+        "tooltip": tooltip,
+        "sort_value": round(current_percent, 2),
+    }
+
+
+def _market_commissioning_status(
+    *,
+    planned_date: Any,
+    actual_date: Any,
+    house_id: Any,
+) -> Dict[str, Any]:
+    actual_dt = _parse_dt(actual_date)
+    planned_dt = _parse_dt(planned_date)
+    if actual_dt:
+        label = f"Сдан · {_format_date(actual_dt)}"
+        return {"label": label, "tooltip": label, "sort_value": actual_dt.toordinal() + 100000}
+    if planned_dt:
+        label = _format_date(planned_dt)
+        tooltip = f"Планируемая дата ввода: {label}\nИсточник: Объектив, характеристики корпуса"
+        return {"label": label, "tooltip": tooltip, "sort_value": planned_dt.toordinal()}
+    reason = (
+        "Дата ввода не найдена в Объективе."
+        if str(house_id or "").startswith("objectiv:")
+        else "Дата ввода не найдена в Объективе или дом не сопоставлен."
+    )
+    return {"label": "н/д", "tooltip": reason, "sort_value": -1}
 
 
 def _market_developer_rows(
@@ -2037,11 +2380,77 @@ def _format_percent(value: float) -> str:
     return f"{value:.1f}%"
 
 
+def _format_date(value: datetime) -> str:
+    return value.strftime("%d.%m.%Y")
+
+
+def _format_exposure_days(value: float | int | None) -> str:
+    if value is None or value <= 0:
+        return "н/д"
+    if float(value).is_integer():
+        return f"{int(value)} дней"
+    return f"{value:.1f} дней"
+
+
+def _months_between(start: datetime, end: datetime) -> float:
+    days = (end.date() - start.date()).days
+    return max(days / 30.4375, 0.0)
+
+
+def _format_compact_delta(value: float, *, kind: str = "count") -> str:
+    if not value:
+        return "0"
+    sign = "+" if value > 0 else "−"
+    absolute = abs(value)
+    if kind == "price":
+        return f"{sign}{_format_int(round(absolute))} ₽"
+    if kind == "ratio":
+        return f"{sign}{absolute:.2f}"
+    return f"{sign}{_format_int(round(absolute))}"
+
+
 def _signed_count(value: int | float, period_days: int) -> str:
     if not value:
         return f"Без изменения за {period_days} дней"
     sign = "+" if value > 0 else "−"
     return f"{sign}{_format_int(abs(value))} за {period_days} дней"
+
+
+def _delta_tone(value: float | int | None) -> str:
+    if value is None or value == 0:
+        return "muted"
+    return "positive" if value > 0 else "negative"
+
+
+def _delta_from_history(current: float | int, previous: float | int | None) -> float | None:
+    if previous is None or previous == 0 and current == 0:
+        return None
+    return round(float(current) - float(previous), 2)
+
+
+def _variability_delta_label(value: float) -> str:
+    if not value:
+        return "на уровне медианы"
+    sign = "+" if value > 0 else "−"
+    return f"{sign}{abs(value):.2f} к медиане"
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _snapshot_status_rank(status: str) -> int:
+    if status == "in_sale":
+        return 2
+    if status == "gone_from_exposure":
+        return 1
+    return 0
 
 
 def _range_label(start: float, end: float, label: str, kind: str) -> str:

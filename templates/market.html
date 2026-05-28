@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Аналитика рынка</title>
+  <title>Обзор рынка</title>
   <link rel="stylesheet" href="/static/style.css?v=20260526-4">
 </head>
 <body>
   {% set header_active_section = header_active_section|default('market') %}
-  {% set header_breadcrumb = report.city ~ ' · Управленческий обзор' %}
-  {% set header_title = header_title|default('Аналитика рынка') %}
+  {% set header_breadcrumb = report.city ~ ' · Обзор рынка' %}
+  {% set header_title = header_title|default('Обзор рынка') %}
   {% set show_export = true %}
   {% set show_refresh = true %}
   {% include "_app_header.html" %}
@@ -18,28 +18,6 @@
     {% set market = report.market %}
     {% set filters = report.filters %}
     {% set run = report.latest_run %}
-
-    <section class="status-band {% if market.health.tone == 'warning' %}error{% endif %}">
-      <div>
-        <span class="label">Последнее обновление</span>
-        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
-      </div>
-      <div>
-        <span class="label">Фокус обзора</span>
-        <strong>
-          {% if market.selected_context.project_name %}
-            {{ market.selected_context.project_name }}
-          {% elif market.selected_context.developer_name %}
-            {{ market.selected_context.developer_name }}
-          {% else %}
-            Весь рынок
-          {% endif %}
-        </strong>
-      </div>
-      <div class="status-message">
-        {{ market.health.description }}
-      </div>
-    </section>
 
     <form class="filters-panel filters-panel-compact market-filters" method="get" action="{{ request.url.path }}">
       <label>Режим рынка
@@ -88,49 +66,6 @@
           <p class="market-kpi-meta">{{ card.meta }}</p>
         </article>
       {% endfor %}
-    </section>
-
-    <section class="developer-strip" id="developers">
-      {% for developer in report.developer_summaries %}
-        <a class="developer-strip-card" href="/developers/{{ developer.id }}">
-          <strong>{{ developer.name }}</strong>
-          <span>{{ developer.projects_count }} проектов · {{ developer.flats_count }} квартир · {{ developer.layout_groups_count }} планировок · {{ developer.flats_per_layout }} кв./план.</span>
-        </a>
-      {% endfor %}
-    </section>
-
-    <section class="market-overview-grid">
-      <article class="panel panel-tight" id="dynamics">
-        <div class="panel-head">
-          <h2>Главное за период</h2>
-          <span>{{ filters.period_days }} дней</span>
-        </div>
-        <div class="insight-stack">
-          {% for insight in market.overview_insights %}
-            <article class="insight-card tone-{{ insight.tone }}">
-              <strong>{{ insight.title }}</strong>
-              <p>{{ insight.text }}</p>
-            </article>
-          {% endfor %}
-        </div>
-      </article>
-
-      <article class="panel panel-tight">
-        <div class="panel-head">
-          <h2>Динамика предложения</h2>
-          <span>{{ market.health.label }}</span>
-        </div>
-        <div class="fact-list compact">
-          <div><span>Было в первом срезе</span><strong>{{ market.dynamics.previous_available_count }}</strong></div>
-          <div><span>Сейчас в продаже</span><strong>{{ market.dynamics.current_available_count }}</strong></div>
-          <div><span title="Квартиры пропали из публичной выдачи. Это не считается продажей без прямого статуса источника.">Ушло из экспозиции</span><strong>{{ market.dynamics.gone_from_exposure }}</strong></div>
-          <div><span>Новых квартир</span><strong>{{ market.dynamics.appeared }}</strong></div>
-          <div><span>С изменением цены</span><strong>{{ market.dynamics.price_changed }}</strong></div>
-        </div>
-        {% if market.health.tone == 'warning' %}
-          <div class="warning-box">{{ market.health.description }}</div>
-        {% endif %}
-      </article>
     </section>
 
     <section class="dashboard-grid market-mid-grid">
@@ -256,6 +191,9 @@
                 </div>
               {% endfor %}
             </div>
+            {% if market.distributions.area_missing_count %}
+              <div class="distribution-note">Есть квартиры без площади: {{ market.distributions.area_missing_count }}</div>
+            {% endif %}
           </div>
 
           <div class="distribution-panel" data-distribution-panel="price" hidden>
@@ -275,99 +213,75 @@
       </article>
     </section>
 
-    <section class="focus-card-grid">
-      {% for card in market.focus_cards %}
-        <a class="focus-card" href="{{ card.href }}">
-          <p class="eyebrow">{{ card.title }}</p>
-          <h3>{{ card.project_name }}</h3>
-          <p class="muted">{{ card.developer_name }}</p>
-          <strong>{{ card.value }}</strong>
-          <p class="focus-card-meta">{{ card.meta }}</p>
-          <div class="badge-row">
-            <span class="badge">{{ card.reliability }}</span>
-            {% for badge in card.badges %}
-              <span class="badge tone-{{ badge.tone }}">{{ badge.label }}</span>
-            {% endfor %}
-          </div>
-        </a>
-      {% endfor %}
-    </section>
-
     <section class="panel">
       <div class="panel-head">
-        <h2>Застройщики</h2>
-        <span>Строки ведут в аналитику конкретного застройщика</span>
+        <h2>Застройщики, проекты и дома</h2>
+        <span>{{ filters.period_days }} дней · динамика встроена в значения</span>
       </div>
-      <table class="analytics-table clickable-table">
+      <div class="market-summary-wrap">
+      <table class="analytics-table market-summary-table" id="marketSummaryTable">
         <thead>
           <tr>
-            <th>Застройщик</th>
-            <th>Проектов</th>
-            <th>Квартир</th>
-            <th>Типовых планировок</th>
-            <th title="Квартир на одну типовую планировку">Кв./план.</th>
-            <th title="Медианная цена за квадратный метр по активной выдаче">Медианная цена за м²</th>
-            <th title="Изменение числа квартир в продаже относительно первого среза периода">Динамика за период</th>
+            <th><button class="table-sort is-active" type="button" data-sort-key="developer" data-sort-type="text" data-sort-default="asc">Застройщик</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="project" data-sort-type="text" data-sort-default="asc">Проект</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="house" data-sort-type="text" data-sort-default="asc">Дом</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="commissioning" data-sort-type="number" data-sort-default="desc">Ввод в эксплуатацию</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="apartments" data-sort-type="number" data-sort-default="desc">Квартир</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="layouts" data-sort-type="number" data-sort-default="desc">Планировок</button></th>
+            <th title="Квартир на одну типовую планировку"><button class="table-sort" type="button" data-sort-key="variability" data-sort-type="number" data-sort-default="desc">Вариативность</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="median-price" data-sort-type="number" data-sort-default="desc">Медианная цена</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="median-price-psm" data-sort-type="number" data-sort-default="desc">Медианная цена за м²</button></th>
+            <th><button class="table-sort" type="button" data-sort-key="sellout" data-sort-type="number" data-sort-default="desc">Вымываемость</button></th>
           </tr>
         </thead>
         <tbody>
-          {% for row in market.developer_rows %}
-            <tr data-href="{{ row.href }}">
-              <td><a href="{{ row.href }}">{{ row.name }}</a></td>
-              <td>{{ row.projects_count }}</td>
-              <td>{{ row.flats_count }}</td>
-              <td>{{ row.layout_groups_count }}</td>
-              <td>{{ row.flats_per_layout }}</td>
-              <td>{{ "{:,.0f}".format(row.median_price_per_sqm).replace(",", " ") }} ₽/м²</td>
-              <td>
-                <span class="badge {% if row.status_tone == 'warning' %}tone-warning{% endif %}">{{ row.dynamics_label }}</span>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Ключевые отклонения от рынка</h2>
-        <span>Детальная таблица вариативности перенесена ниже и больше не доминирует над обзором</span>
-      </div>
-      <table class="analytics-table">
-        <thead>
-          <tr>
-            <th>Проект</th>
-            <th>Застройщик</th>
-            <th title="Квартир на одну типовую планировку">Кв./план.</th>
-            <th title="Медиана рынка по выбранной выборке">Медиана рынка</th>
-            <th>Отклонение</th>
-            <th title="Надежность зависит от размера текущей выборки">Надежность</th>
-            <th>Бейджи</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in market.variability_table %}
+          {% for row in market.summary_rows %}
             <tr>
-              <td><a href="{{ item.detail_url }}">{{ item.project_name }}</a></td>
-              <td>{{ item.developer_name }}</td>
-              <td>{{ item.value }}</td>
-              <td>{{ item.market_median }}</td>
-              <td>{{ item.deviation_percent }}%</td>
-              <td>{{ item.reliability }}</td>
-              <td>
-                <div class="badge-row">
-                  {% for badge in item.badges %}
-                    <span class="badge tone-{{ badge.tone }}">{{ badge.label }}</span>
-                  {% endfor %}
-                  {% if not item.badges %}
-                    <span class="muted">без яркого отклонения</span>
-                  {% endif %}
-                </div>
+              <td data-sort-value="{{ row.developer_name|lower }}"><a href="{{ row.developer_href }}">{{ row.developer_name }}</a></td>
+              <td data-sort-value="{{ row.project_name|lower }}"><a href="{{ row.project_href }}">{{ row.project_name }}</a></td>
+              <td data-sort-value="{{ (row.house_name or '—')|lower }}">{{ row.house_name or '—' }}</td>
+              <td data-sort-value="{{ row.commissioning_sort }}" title="{{ row.commissioning_tooltip }}">
+                <span class="badge tone-{{ 'positive' if row.commissioning_label.startswith('Сдан') else 'neutral' if row.commissioning_label != 'н/д' else 'muted' }}">{{ row.commissioning_label }}</span>
+              </td>
+              <td data-sort-value="{{ row.apartments_count }}">
+                <strong>{{ row.apartments_count }}</strong>
+                {% if row.apartments_delta is not none %}
+                  <span class="cell-delta tone-{{ 'positive' if row.apartments_delta > 0 else 'negative' if row.apartments_delta < 0 else 'muted' }}">
+                    ({{ '+' if row.apartments_delta > 0 else '−' if row.apartments_delta < 0 else '' }}{{ (row.apartments_delta | abs) | round(0) | int }})
+                  </span>
+                {% endif %}
+              </td>
+              <td data-sort-value="{{ row.layout_groups_count }}">
+                <strong>{{ row.layout_groups_count }}</strong>
+                {% if row.layouts_delta is not none %}
+                  <span class="cell-delta tone-{{ 'positive' if row.layouts_delta > 0 else 'negative' if row.layouts_delta < 0 else 'muted' }}">
+                    ({{ '+' if row.layouts_delta > 0 else '−' if row.layouts_delta < 0 else '' }}{{ (row.layouts_delta | abs) | round(0) | int }})
+                  </span>
+                {% endif %}
+              </td>
+              <td data-sort-value="{{ row.flats_per_layout }}">
+                <strong>{{ '%.2f'|format(row.flats_per_layout) }} кв./план.</strong>
+                <span class="cell-delta tone-{{ row.variability_tone }}">{{ row.variability_label }}</span>
+              </td>
+              <td data-sort-value="{{ row.median_price }}">
+                <strong>{{ "{:,.0f}".format(row.median_price).replace(",", " ") if row.median_price else 'н/д' }}{% if row.median_price %} ₽{% endif %}</strong>
+                {% if row.median_price_delta is not none %}
+                  <span class="cell-delta tone-{{ 'positive' if row.median_price_delta > 0 else 'negative' if row.median_price_delta < 0 else 'muted' }}">
+                    ({{ '+' if row.median_price_delta > 0 else '−' if row.median_price_delta < 0 else '' }}{{ "{:,.0f}".format((row.median_price_delta | abs)).replace(",", " ") }} ₽)
+                  </span>
+                {% endif %}
+              </td>
+              <td data-sort-value="{{ row.median_price_per_sqm }}">
+                {{ "{:,.0f}".format(row.median_price_per_sqm).replace(",", " ") if row.median_price_per_sqm else 'н/д' }}{% if row.median_price_per_sqm %} ₽/м²{% endif %}
+              </td>
+              <td data-sort-value="{{ row.sellout_sort }}" title="{{ row.sellout_tooltip }}">
+                <span class="badge tone-{{ row.sellout_tone }}">{{ row.sellout_label }}</span>
               </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </section>
   </main>
 
@@ -475,6 +389,68 @@
         window.location.href = row.dataset.href;
       });
     });
+
+    const marketSummaryTable = document.getElementById('marketSummaryTable');
+    if (marketSummaryTable) {
+      const tbody = marketSummaryTable.querySelector('tbody');
+      const sortButtons = [...marketSummaryTable.querySelectorAll('.table-sort')];
+      const columnIndexByKey = {
+        developer: 0,
+        project: 1,
+        house: 2,
+        commissioning: 3,
+        apartments: 4,
+        layouts: 5,
+        variability: 6,
+        'median-price': 7,
+        'median-price-psm': 8,
+        sellout: 9,
+      };
+
+      function sortRows(key, direction, type) {
+        if (!tbody || !(key in columnIndexByKey)) return;
+        const index = columnIndexByKey[key];
+        const rows = [...tbody.querySelectorAll('tr')];
+        rows.sort((left, right) => {
+          const leftCell = left.children[index];
+          const rightCell = right.children[index];
+          const leftRaw = leftCell?.dataset.sortValue ?? leftCell?.textContent?.trim() ?? '';
+          const rightRaw = rightCell?.dataset.sortValue ?? rightCell?.textContent?.trim() ?? '';
+          if (type === 'number') {
+            const leftValue = Number(leftRaw);
+            const rightValue = Number(rightRaw);
+            if (Number.isNaN(leftValue) && Number.isNaN(rightValue)) return 0;
+            if (Number.isNaN(leftValue)) return 1;
+            if (Number.isNaN(rightValue)) return -1;
+            return direction === 'asc' ? leftValue - rightValue : rightValue - leftValue;
+          }
+          return direction === 'asc'
+            ? String(leftRaw).localeCompare(String(rightRaw), 'ru')
+            : String(rightRaw).localeCompare(String(leftRaw), 'ru');
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+      }
+
+      sortButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const currentDirection = button.dataset.direction || button.dataset.sortDefault || 'asc';
+          const nextDirection = button.classList.contains('is-active') && currentDirection === 'asc' ? 'desc' : 'asc';
+          sortButtons.forEach((item) => {
+            item.classList.remove('is-active');
+            item.removeAttribute('data-direction');
+          });
+          button.classList.add('is-active');
+          button.dataset.direction = nextDirection;
+          sortRows(button.dataset.sortKey, nextDirection, button.dataset.sortType || 'text');
+        });
+      });
+
+      const activeDefault = marketSummaryTable.querySelector('.table-sort.is-active');
+      if (activeDefault) {
+        activeDefault.dataset.direction = activeDefault.dataset.sortDefault || 'asc';
+        sortRows(activeDefault.dataset.sortKey, activeDefault.dataset.direction, activeDefault.dataset.sortType || 'text');
+      }
+    }
   </script>
   {% include "_refresh_script.html" %}
 </body>

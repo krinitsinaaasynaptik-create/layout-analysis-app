@@ -21,6 +21,7 @@ from .db import (
     update_layout_tags,
 )
 from .grouping import build_layout_groups
+from .objectiv_house_metadata import enrich_houses_with_objectiv_metadata
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
 from .price_dynamics import build_price_dynamics_report, export_price_dynamics_csv
@@ -78,6 +79,12 @@ def _run_refresh(objectiv_access_token: str, developer_id: Optional[str] = None)
         for item_developer_id, developer_name, developer_type, source_url, source, parser in parsers:
             try:
                 houses, flats, source_total = parser.parse()
+                if objectiv_access_token and item_developer_id in {"zhcom", "sretensky"}:
+                    houses = enrich_houses_with_objectiv_metadata(
+                        houses,
+                        developer_id=item_developer_id,
+                        access_token=objectiv_access_token,
+                    )
             except Exception as exc:
                 raise RuntimeError(f"{developer_name}: {exc}") from exc
             groups = build_layout_groups(flats)

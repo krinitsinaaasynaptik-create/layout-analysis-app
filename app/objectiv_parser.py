@@ -14,6 +14,7 @@ from .parser import REQUEST_HEADERS
 
 
 SALE_STATUS = "В продаже"
+DEAL_STATUS = "Сделка"
 
 
 class ObjectivParser:
@@ -31,7 +32,7 @@ class ObjectivParser:
         headers.update({"Accept": "application/json", "Content-Type": "application/json"})
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
-        self.client = httpx.Client(headers=headers, timeout=30.0, follow_redirects=True)
+        self.client = httpx.Client(headers=headers, timeout=60.0, follow_redirects=True)
 
     def close(self) -> None:
         self.client.close()
@@ -53,13 +54,13 @@ class ObjectivParser:
                 oks_id = int(oks["id"])
                 oks_info = self._get_json("/api/ProjectCards/GetOksInfo", params={"oksId": oks_id})
                 house = self._house(project, oks_info)
-                houses_by_id[house.house_id] = house
-
                 on_date = self._latest_grid_date(oks_id)
                 grid = self._get_json("/api/ProjectCards/GetOksGrid", params={"oksId": oks_id, "onDate": on_date})
                 self._write_cache(f"objectiv_grid_{oks_id}.json", grid)
 
                 lots = self._grid_lots(grid)
+                house = self._house(project, oks_info, lots)
+                houses_by_id[house.house_id] = house
                 source_total += len(lots)
                 flats.extend(self._parse_grid_flats(project, house, lots))
 
@@ -100,15 +101,34 @@ class ObjectivParser:
             raise ValueError(f"Objectiv grid intervals are empty for oksId={oks_id}")
         return f"{latest[0]:04d}-{latest[1]:02d}-{latest[2]:02d}"
 
-    def _house(self, project: Dict[str, Any], oks_info: Dict[str, Any]) -> House:
+    def _house(self, project: Dict[str, Any], oks_info: Dict[str, Any], lots: List[Dict[str, Any]] | None = None) -> House:
         project_id = f"objectiv:{project['id']}"
         house_id = f"objectiv:{oks_info['id']}"
         house_name = f"{project.get('name')}, корпус {oks_info.get('name') or oks_info['id']}"
+        deal_apartments_count = None
+        avg_deal_exposure_days = None
+        if lots is not None:
+            deal_apartments_count, avg_deal_exposure_days = self._deal_stats(lots)
         return House(
             project_id=project_id,
             project_name=str(project.get("name") or project_id),
             house_id=house_id,
             house_name=house_name,
+            total_apartments=self._int(oks_info.get("flatsCount")),
+            commissioning_date=str(oks_info.get("planningEndDate") or "") or None,
+            actual_commissioning_date=(
+                str(
+                    oks_info.get("actualEndDate")
+                    or oks_info.get("factEndDate")
+                    or oks_info.get("factCommissioningDate")
+                    or oks_info.get("commissioningDate")
+                    or ""
+                )
+                or None
+            ),
+            deal_apartments_count=deal_apartments_count,
+            avg_deal_exposure_days=avg_deal_exposure_days,
+            sales_start_date=str(oks_info.get("salesStartDate") or "") or None,
         )
 
     def _grid_lots(self, grid: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -189,6 +209,30 @@ class ObjectivParser:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    def _deal_stats(self, lots: List[Dict[str, Any]]) -> tuple[int, float | None]:
+        exposure_days: List[int] = []
+        deal_count = 0
+        for lot in lots:
+            status = lot.get("status") or {}
+            if lot.get("type") != "квартира" or status.get("status") != DEAL_STATUS:
+                continue
+            deal_count += 1
+            days = self._parse_days_in_sale(status.get("daysInSale"))
+            if days is not None:
+                exposure_days.append(days)
+        if not exposure_days:
+            return deal_count, None
+        return deal_count, round(sum(exposure_days) / len(exposure_days), 1)
+
+    def _parse_days_in_sale(self, value: Any) -> int | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        digits = "".join(char for char in text if char.isdigit())
+        if not digits:
+            return None
+        return int(digits)
 
     def _write_cache(self, filename: str, data: Dict[str, Any]) -> None:
         CACHE_DIR.mkdir(exist_ok=True)

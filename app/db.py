@@ -161,7 +161,13 @@ def _schema_sql(backend: str) -> str:
             house_id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL,
             project_name TEXT NOT NULL,
-            house_name TEXT NOT NULL
+            house_name TEXT NOT NULL,
+            total_apartments INTEGER,
+            commissioning_date TEXT,
+            actual_commissioning_date TEXT,
+            deal_apartments_count INTEGER,
+            avg_deal_exposure_days REAL,
+            sales_start_date TEXT
         );
 
         CREATE TABLE IF NOT EXISTS flats (
@@ -285,7 +291,7 @@ def _table_columns(conn: DBConnection, table: str) -> set[str]:
 
 
 def _migrate_columns(conn: DBConnection) -> None:
-    columns = {table: _table_columns(conn, table) for table in ("developers", "flats", "layout_groups")}
+    columns = {table: _table_columns(conn, table) for table in ("developers", "flats", "layout_groups", "houses")}
     developer_columns = {
         "type": "TEXT NOT NULL DEFAULT 'competitor'",
     }
@@ -323,6 +329,17 @@ def _migrate_columns(conn: DBConnection) -> None:
     for name, ddl in group_columns.items():
         if name not in columns["layout_groups"]:
             conn.execute(f"ALTER TABLE layout_groups ADD COLUMN {name} {ddl}")
+    house_columns = {
+        "total_apartments": "INTEGER",
+        "commissioning_date": "TEXT",
+        "actual_commissioning_date": "TEXT",
+        "deal_apartments_count": "INTEGER",
+        "avg_deal_exposure_days": "REAL",
+        "sales_start_date": "TEXT",
+    }
+    for name, ddl in house_columns.items():
+        if name not in columns["houses"]:
+            conn.execute(f"ALTER TABLE houses ADD COLUMN {name} {ddl}")
 
 
 def _seed_reference_data(conn: DBConnection) -> None:
@@ -488,10 +505,27 @@ def replace_data(
 
         conn.executemany(
             """
-            INSERT INTO houses (house_id, project_id, project_name, house_name)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO houses (
+                house_id, project_id, project_name, house_name, total_apartments, commissioning_date, actual_commissioning_date,
+                deal_apartments_count, avg_deal_exposure_days, sales_start_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [(h.house_id, h.project_id, h.project_name, h.house_name) for h in houses],
+            [
+                (
+                    h.house_id,
+                    h.project_id,
+                    h.project_name,
+                    h.house_name,
+                    h.total_apartments,
+                    h.commissioning_date,
+                    h.actual_commissioning_date,
+                    h.deal_apartments_count,
+                    h.avg_deal_exposure_days,
+                    h.sales_start_date,
+                )
+                for h in houses
+            ],
         )
         counts_by_house: Dict[str, int] = {}
         for flat in flats:
