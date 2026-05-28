@@ -24,6 +24,7 @@ from .grouping import build_layout_groups
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
 from .price_dynamics import build_price_dynamics_report, export_price_dynamics_csv
+from .refresh_catalog import REFRESH_TARGET_BY_ID, REFRESH_TARGETS
 from .report import build_compare_report, build_csv, build_report
 from .sretensky_parser import PLANS_URL as SRETENSKY_URL, SretenskyParser
 
@@ -35,6 +36,70 @@ app = FastAPI(title="Анализ вариативности планирово�
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.mount("/data-images", StaticFiles(directory=IMAGE_DIR), name="data-images")
+
+
+def _build_parser(target_id: str, objectiv_access_token: str):
+    target = REFRESH_TARGET_BY_ID.get(target_id)
+    if not target:
+        raise RuntimeError("Неизвестный застройщик для обновления.")
+    if target.source == "zhcom":
+        return (target.id, target.name, target.developer_type, target.source_url, target.source, ZhcomParser())
+    if target.source == "sretensky":
+        return (target.id, target.name, target.developer_type, target.source_url, target.source, SretenskyParser())
+    if not objectiv_access_token:
+        raise RuntimeError(f"{target.name}: нужен токен Объектива.")
+    return (
+        target.id,
+        target.name,
+        target.developer_type,
+        target.source_url,
+        target.source,
+        ObjectivParser(group_name=target.objectiv_group_name, access_token=objectiv_access_token),
+    )
+
+
+def _refresh_parsers(objectiv_access_token: str, developer_id: Optional[str] = None):
+    target_ids = [developer_id] if developer_id else [target.id for target in REFRESH_TARGETS]
+    return [_build_parser(target_id, objectiv_access_token) for target_id in target_ids]
+
+
+def _run_refresh(objectiv_access_token: str, developer_id: Optional[str] = None) -> JSONResponse:
+    try:
+        parsers = _refresh_parsers(objectiv_access_token, developer_id)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+    run_id = start_run()
+    try:
+        from .db import replace_data
+
+        total_source = 0
+        total_collected = 0
+        messages = []
+        for item_developer_id, developer_name, developer_type, source_url, source, parser in parsers:
+            try:
+                houses, flats, source_total = parser.parse()
+            except Exception as exc:
+                raise RuntimeError(f"{developer_name}: {exc}") from exc
+            groups = build_layout_groups(flats)
+            replace_data(houses, flats, groups, item_developer_id, developer_name, developer_type, source_url, source)
+            total_source += source_total
+            total_collected += len(flats)
+            if flats:
+                messages.append(
+                    f"{developer_name}: домов {len({flat.house_id for flat in flats})}, "
+                    f"квартир {len(flats)}, планировок {len(groups)}"
+                )
+            else:
+                messages.append(f"{developer_name}: квартир 0")
+        message = "Обновлено: " + "; ".join(messages) + "."
+        finish_run(run_id, "success", message, total_source, total_collected)
+        return JSONResponse({"ok": True, "message": message, "report": build_report()})
+    except Exception as exc:
+        finish_run(run_id, "error", str(exc), 0, 0)
+        return JSONResponse({"ok": False, "message": str(exc), "report": build_report()}, status_code=500)
+    finally:
+        for *_meta, parser in parsers:
+            parser.close()
 
 
 @app.get("/image-files/{filename:path}")
@@ -220,68 +285,17 @@ async def refresh(request: Request) -> JSONResponse:
     except Exception:
         body = {}
     objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
-    run_id = start_run()
-    parsers = [
-        ("zhcom", "Железно", "competitor", "https://zhcom.ru/kirov/flats?limit=16", "zhcom", ZhcomParser()),
-        ("sretensky", "Сретенский посад", "competitor", SRETENSKY_URL, "sretensky", SretenskyParser()),
-    ]
-    if objectiv_access_token:
-        objectiv_parsers = [
-            ("kssk", "КССК", "own", "КССК"),
-            ("smu5", "СМУ-5", "competitor", "СМУ-5"),
-            ("stroysoyuz", "Стройсоюз", "competitor", "Стройсоюз"),
-            ("altaistroy", "АлтайСтрой", "competitor", "АлтайСтрой"),
-            ("profstroy", "Профстрой", "competitor", "Профстрой"),
-            ("ksm", "КСМ", "competitor", "КСМ"),
-            ("avitek", "Авитек", "competitor", "Авитек"),
-            ("mayakovskaya", "Маяковская", "competitor", "Маяковская"),
-            ("kino_development", "Кино Девелопмент", "competitor", "Кино Девелопмент"),
-            ("arso_group", "Арсо Групп", "competitor", "Арсо Групп"),
-            ("gipromstroy", "Гипромстрой", "competitor", "Гипромстрой"),
-            ("moy_dom", "Мой дом", "competitor", "Мой дом"),
-            ("stroycity", "СтройСити", "competitor", "СтройСити"),
-        ]
-        for developer_id, developer_name, developer_type, group_name in reversed(objectiv_parsers):
-            parsers.insert(
-                2,
-                (
-                    developer_id,
-                    developer_name,
-                    developer_type,
-                    "https://объектив.рф/ProjectCards",
-                    "objectiv",
-                    ObjectivParser(group_name=group_name, access_token=objectiv_access_token),
-                ),
-            )
-    try:
-        from .db import replace_data
+    return _run_refresh(objectiv_access_token)
 
-        total_source = 0
-        total_collected = 0
-        messages = []
-        for developer_id, developer_name, developer_type, source_url, source, parser in parsers:
-            try:
-                houses, flats, source_total = parser.parse()
-            except Exception as exc:
-                raise RuntimeError(f"{developer_name}: {exc}") from exc
-            groups = build_layout_groups(flats)
-            replace_data(houses, flats, groups, developer_id, developer_name, developer_type, source_url, source)
-            total_source += source_total
-            total_collected += len(flats)
-            if flats:
-                messages.append(
-                    f"{developer_name}: домов {len({flat.house_id for flat in flats})}, "
-                    f"квартир {len(flats)}, планировок {len(groups)}"
-                )
-        message = "Обновлено: " + "; ".join(messages) + "."
-        finish_run(run_id, "success", message, total_source, total_collected)
-        return JSONResponse({"ok": True, "message": message, "report": build_report()})
-    except Exception as exc:
-        finish_run(run_id, "error", str(exc), 0, 0)
-        return JSONResponse({"ok": False, "message": str(exc), "report": build_report()}, status_code=500)
-    finally:
-        for *_meta, parser in parsers:
-            parser.close()
+
+@app.post("/api/refresh/{developer_id}")
+async def refresh_developer(developer_id: str, request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
+    return _run_refresh(objectiv_access_token, developer_id.strip())
 
 
 @app.get("/api/report")

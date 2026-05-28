@@ -7,8 +7,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .db import fetch_report_rows
+from .db import fetch_refresh_targets, fetch_report_rows, latest_run
 from .project_canon import canonical_project_ref
+from .refresh_catalog import REFRESH_TARGETS
 
 
 PERIOD_OPTIONS = {
@@ -145,7 +146,28 @@ def build_price_dynamics_report(
         "has_any_data": bool(periods),
         "is_history_view": view == "history",
         "latest_period": periods[-1] if periods else None,
+        "latest_run": _latest_run_for_display(),
+        "refresh_targets": _refresh_targets_for_display(),
     }
+
+
+def _latest_run_for_display() -> Dict[str, Any] | None:
+    run = latest_run()
+    return dict(run) if run else None
+
+
+def _refresh_targets_for_display() -> List[Dict[str, Any]]:
+    latest_by_id = {item.get("id"): dict(item) for item in fetch_refresh_targets() if item.get("id")}
+    return [
+        {
+            "id": target.id,
+            "name": latest_by_id.get(target.id, {}).get("name") or target.name,
+            "type": latest_by_id.get(target.id, {}).get("type") or target.developer_type,
+            "latest_snapshot_at": latest_by_id.get(target.id, {}).get("latest_snapshot_at"),
+            "requires_objectiv_token": target.requires_objectiv_token,
+        }
+        for target in REFRESH_TARGETS
+    ]
 
 
 def export_price_dynamics_csv(**kwargs: Any) -> str:

@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .analytics import metrics as m
-from .db import fetch_report_rows
+from .db import fetch_refresh_targets, fetch_report_rows, latest_run
+from .refresh_catalog import REFRESH_TARGETS
 from .project_canon import canonicalize_project_data
 from .simple_xlsx import Cell, Sheet, build_workbook_bytes
 
@@ -94,9 +95,30 @@ def build_area_dashboard(
         "insights": insights,
         "warnings": current["warnings"],
         "has_data": bool(filtered_flats),
+        "latest_run": _latest_run_for_display(),
+        "refresh_targets": _refresh_targets_for_display(),
         "_export_flats": filtered_flats,
         "_export_developers": active_developers,
     }
+
+
+def _latest_run_for_display() -> Dict[str, Any] | None:
+    run = latest_run()
+    return dict(run) if run else None
+
+
+def _refresh_targets_for_display() -> List[Dict[str, Any]]:
+    latest_by_id = {item.get("id"): dict(item) for item in fetch_refresh_targets() if item.get("id")}
+    return [
+        {
+            "id": target.id,
+            "name": latest_by_id.get(target.id, {}).get("name") or target.name,
+            "type": latest_by_id.get(target.id, {}).get("type") or target.developer_type,
+            "latest_snapshot_at": latest_by_id.get(target.id, {}).get("latest_snapshot_at"),
+            "requires_objectiv_token": target.requires_objectiv_token,
+        }
+        for target in REFRESH_TARGETS
+    ]
 
 
 def export_area_dashboard_csv(**kwargs: Any) -> str:

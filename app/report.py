@@ -10,7 +10,8 @@ from typing import Any, Dict, List
 
 from .analytics import metrics as m
 from .config import CITY, COMPETITOR, IMAGE_DIR, OWN_COMPANY, USE_LOCAL_IMAGE_FILES
-from .db import fetch_report_rows, latest_run
+from .db import fetch_refresh_targets, fetch_report_rows, latest_run
+from .refresh_catalog import REFRESH_TARGETS
 from .project_canon import canonicalize_project_data
 
 
@@ -382,6 +383,7 @@ def build_report(
             "room_options": room_options,
         },
         "latest_run": _latest_run_for_display(),
+        "refresh_targets": _refresh_targets_for_display(),
         "totals": {
             "projects": len(projects),
             "houses": len([house for house in houses if flats_by_house.get(house["house_id"])]),
@@ -514,6 +516,7 @@ def build_compare_report(
                 "text": "Обновите данные из Объектива, чтобы сравнить предложение КССК с рынком конкурентов.",
             },
             "latest_run": _latest_run_for_display(),
+            "refresh_targets": _refresh_targets_for_display(),
         }
 
     own_report = build_report(
@@ -564,6 +567,7 @@ def build_compare_report(
         "city": CITY,
         "own_developer": own_developer,
         "latest_run": _latest_run_for_display(),
+        "refresh_targets": _refresh_targets_for_display(),
         "empty_state": None if own_count else {
             "title": "Предложения КССК еще не загружены.",
             "text": "Обновите данные из Объектива, чтобы сравнить предложение КССК с рынком конкурентов.",
@@ -798,6 +802,27 @@ def _latest_run_for_display() -> Dict[str, Any] | None:
         if active_parts:
             run["message"] = prefix + "; ".join(active_parts) + suffix
     return run
+
+
+def _refresh_targets_for_display() -> List[Dict[str, Any]]:
+    latest_by_id = {
+        item.get("id"): dict(item)
+        for item in fetch_refresh_targets()
+        if item.get("id")
+    }
+    items: List[Dict[str, Any]] = []
+    for target in REFRESH_TARGETS:
+        latest = latest_by_id.get(target.id, {})
+        items.append(
+            {
+                "id": target.id,
+                "name": latest.get("name") or target.name,
+                "type": latest.get("type") or target.developer_type,
+                "latest_snapshot_at": latest.get("latest_snapshot_at"),
+                "requires_objectiv_token": target.requires_objectiv_token,
+            }
+        )
+    return items
 
 
 def _developer_ids_by_scope(developers: List[Dict[str, Any]], developer_scope: str) -> set[str]:

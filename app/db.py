@@ -717,6 +717,24 @@ def latest_run() -> Dict[str, Any] | None:
         return dict(row) if row else None
 
 
+def fetch_refresh_targets() -> List[Dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                d.id,
+                d.name,
+                d.type,
+                MAX(CASE WHEN s.status = 'success' THEN s.collected_at END) AS latest_snapshot_at
+            FROM developers d
+            LEFT JOIN snapshots s ON s.developer_id = d.id
+            GROUP BY d.id, d.name, d.type
+            ORDER BY CASE WHEN d.type = 'own' THEN 0 ELSE 1 END, d.name
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def fetch_report_rows() -> Dict[str, List[Any]]:
     with connect() as conn:
         return {

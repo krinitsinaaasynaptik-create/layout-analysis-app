@@ -497,9 +497,62 @@ main {
   color: #fff;
 }
 
+.refresh-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.refresh-modal[hidden] {
+  display: none;
+}
+
+.refresh-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.refresh-modal-panel {
+  position: relative;
+  width: min(840px, calc(100% - 24px));
+  max-height: min(80vh, 900px);
+  overflow: auto;
+  margin: 56px auto 0;
+  padding: 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+}
+
+.refresh-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.refresh-modal-head h2 {
+  margin: 4px 0 0;
+}
+
+.refresh-modal-close {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .refresh-token-panel {
-  width: min(1440px, calc(100% - 24px));
-  margin: 8px auto 0;
   display: grid;
   grid-template-columns: minmax(280px, 520px) 1fr;
   gap: 12px;
@@ -508,10 +561,6 @@ main {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
   background: var(--surface);
-}
-
-.refresh-token-panel[hidden] {
-  display: none;
 }
 
 .refresh-token-panel label {
@@ -545,6 +594,44 @@ main {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 16px;
+}
+
+.refresh-target-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.refresh-target-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: var(--surface-muted);
+}
+
+.refresh-target-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.refresh-target-meta strong {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.refresh-target-meta span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.refresh-target-button {
+  min-width: 132px;
+  min-height: 40px;
 }
 
 .local-tabs {
@@ -2072,6 +2159,20 @@ body.modal-open {
   .developer-strip,
   .tag-editor {
     grid-template-columns: 1fr;
+  }
+
+  .refresh-modal-panel {
+    margin-top: 24px;
+    padding: 16px;
+  }
+
+  .refresh-target-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .refresh-target-button {
+    width: 100%;
   }
 
   .dashboard-filters {

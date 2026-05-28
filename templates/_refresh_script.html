@@ -1,7 +1,10 @@
 <script>
   const refreshButton = document.getElementById('refreshButton');
-  const refreshTokenPanel = document.getElementById('refreshTokenPanel');
+  const refreshModal = document.getElementById('refreshModal');
+  const refreshModalBackdrop = document.getElementById('refreshModalBackdrop');
+  const refreshModalClose = document.getElementById('refreshModalClose');
   const objectivTokenInput = document.getElementById('objectivTokenInput');
+  const refreshTargetButtons = Array.from(document.querySelectorAll('[data-refresh-developer]'));
 
   function notifyRefresh(message) {
     if (typeof showToast === 'function') {
@@ -15,32 +18,62 @@
     }
   }
 
-  if (refreshButton && refreshTokenPanel && objectivTokenInput) {
-    refreshButton.addEventListener('click', async () => {
-      if (refreshTokenPanel.hidden) {
-        refreshTokenPanel.hidden = false;
-        objectivTokenInput.focus();
-        notifyRefresh('Вставьте токен Объектива и нажмите «Обновить» еще раз.');
-        return;
-      }
-      refreshButton.disabled = true;
-      refreshButton.textContent = 'Обновляем...';
-      notifyRefresh('Сбор данных может занять несколько минут.');
-      try {
-        const response = await fetch('/api/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ objectiv_access_token: objectivTokenInput.value.trim() })
-        });
-        const payload = await response.json();
-        notifyRefresh(payload.message || 'Готово');
-        if (payload.ok) window.location.reload();
-      } catch (error) {
-        notifyRefresh('Не удалось обновить данные.');
-      } finally {
-        refreshButton.disabled = false;
-        refreshButton.textContent = 'Обновить';
-      }
+  function openRefreshModal() {
+    if (!refreshModal) return;
+    refreshModal.hidden = false;
+  }
+
+  function closeRefreshModal() {
+    if (!refreshModal) return;
+    refreshModal.hidden = true;
+  }
+
+  async function refreshDeveloper(button) {
+    const developerId = button.dataset.refreshDeveloper;
+    const developerName = button.dataset.refreshName || 'застройщик';
+    const requiresToken = button.dataset.requiresToken === '1';
+    if (requiresToken && objectivTokenInput && !objectivTokenInput.value.trim()) {
+      objectivTokenInput.focus();
+      notifyRefresh(`Для ${developerName} нужен токен Объектива.`);
+      return;
+    }
+    button.disabled = true;
+    const originalText = button.textContent;
+    button.textContent = 'Обновляем...';
+    notifyRefresh(`Обновляем ${developerName}. Это может занять несколько минут.`);
+    try {
+      const response = await fetch(`/api/refresh/${developerId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectiv_access_token: objectivTokenInput ? objectivTokenInput.value.trim() : '' })
+      });
+      const payload = await response.json();
+      notifyRefresh(payload.message || 'Готово');
+      if (payload.ok) window.location.reload();
+    } catch (error) {
+      notifyRefresh(`Не удалось обновить ${developerName}.`);
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+
+  if (refreshButton && refreshModal) {
+    refreshButton.addEventListener('click', () => {
+      openRefreshModal();
+      if (objectivTokenInput) objectivTokenInput.focus();
+    });
+    if (refreshModalBackdrop) refreshModalBackdrop.addEventListener('click', closeRefreshModal);
+    if (refreshModalClose) refreshModalClose.addEventListener('click', closeRefreshModal);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !refreshModal.hidden) closeRefreshModal();
+    });
+    refreshTargetButtons.forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (refreshButton) refreshButton.disabled = true;
+        await refreshDeveloper(button);
+        if (refreshButton) refreshButton.disabled = false;
+      });
     });
   }
 </script>

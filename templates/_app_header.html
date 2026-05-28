@@ -25,10 +25,48 @@
   </nav>
 </header>
 {% if show_refresh_action %}
-  <div class="refresh-token-panel" id="refreshTokenPanel" hidden>
-    <label>Токен Объектива
-      <input id="objectivTokenInput" type="password" autocomplete="off" placeholder="access_token для Объектива">
-    </label>
-    <p>Поле можно оставить пустым, если токен уже задан в окружении сервиса.</p>
+  <div class="refresh-modal" id="refreshModal" hidden>
+    <button class="refresh-modal-backdrop" id="refreshModalBackdrop" type="button" aria-label="Закрыть"></button>
+    <div class="refresh-modal-panel" role="dialog" aria-modal="true" aria-labelledby="refreshModalTitle">
+      <div class="refresh-modal-head">
+        <div>
+          <p class="eyebrow">Обновление данных</p>
+          <h2 id="refreshModalTitle">Обновить застройщиков</h2>
+        </div>
+        <button class="refresh-modal-close" id="refreshModalClose" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="refresh-token-panel">
+        <label>Токен Объектива
+          <input id="objectivTokenInput" type="password" autocomplete="off" placeholder="access_token для Объектива">
+        </label>
+        <p>Поле можно оставить пустым, если токен уже задан в окружении сервиса.</p>
+      </div>
+      <div class="refresh-target-list">
+        {% for item in report.refresh_targets %}
+          <article class="refresh-target-card" data-developer-id="{{ item.id }}">
+            <div class="refresh-target-meta">
+              <strong>{{ item.name }}</strong>
+              <span>
+                Последнее обновление:
+                {% if item.latest_snapshot_at %}
+                  {{ item.latest_snapshot_at }}
+                {% else %}
+                  еще не обновлялся
+                {% endif %}
+              </span>
+            </div>
+            <button
+              class="button refresh-target-button"
+              type="button"
+              data-refresh-developer="{{ item.id }}"
+              data-refresh-name="{{ item.name }}"
+              {% if item.requires_objectiv_token %}data-requires-token="1"{% endif %}
+            >
+              Обновить
+            </button>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 {% endif %}
