@@ -40,6 +40,8 @@ def build_report(
     calc_mode: str = "apartments",
     rooms: str | None = None,
     developer_scope: str = "all",
+    include_group_metrics: bool = True,
+    include_similar_layouts: bool = True,
 ) -> Dict[str, Any]:
     rows = fetch_report_rows()
     all_developers = [dict(row) for row in rows.get("developers", [])]
@@ -235,9 +237,14 @@ def build_report(
         )
         house_groups = groups_by_house.get(house["house_id"], [])
         scope_house_flats = scope_flats_by_house.get(house["house_id"], [])
-        for group in house_groups:
-            group["project_id"] = house["project_id"]
-            group["metrics"] = m.layout_metrics(group, scope_flats)
+        if include_group_metrics:
+            for group in house_groups:
+                group["project_id"] = house["project_id"]
+                group["metrics"] = m.layout_metrics(group, scope_flats)
+        else:
+            for group in house_groups:
+                group["project_id"] = house["project_id"]
+                group["metrics"] = {}
 
         room_totals = _count_by_room(house_flats)
         scope_room_totals = _count_by_room(scope_house_flats)
@@ -331,8 +338,12 @@ def build_report(
         for room in house["rooms"]
         for group in room["groups"]
     ]
-    for group in report_groups:
-        group["similar_layouts"] = [_layout_teaser(item) for item in m.similar_layouts(group, report_groups)]
+    if include_similar_layouts:
+        for group in report_groups:
+            group["similar_layouts"] = [_layout_teaser(item) for item in m.similar_layouts(group, report_groups)]
+    else:
+        for group in report_groups:
+            group["similar_layouts"] = []
 
     developer = _build_developer_analytics(project_list, flats, report_groups, dynamics)
     market = _build_market_analytics(
@@ -525,6 +536,8 @@ def build_compare_report(
         project_id=own_project_id,
         rooms=rooms,
         developer_scope="all",
+        include_group_metrics=False,
+        include_similar_layouts=False,
     )
     competitor_report = build_report(
         period_days,
@@ -532,6 +545,8 @@ def build_compare_report(
         project_id=competitor_project_id,
         rooms=rooms,
         developer_scope="competitors",
+        include_group_metrics=False,
+        include_similar_layouts=False,
     )
 
     all_flats = [dict(row) for row in rows.get("flats", [])]

@@ -123,6 +123,8 @@ def index(request: Request) -> HTMLResponse:
                 calc_mode=_calc_mode(request),
                 developer_id=_developer_id(request),
                 developer_scope=_market_mode(request),
+                include_group_metrics=False,
+                include_similar_layouts=False,
             ),
         },
     )
@@ -139,6 +141,8 @@ def developer_page(request: Request, developer_id: str) -> HTMLResponse:
                 developer_id=developer_id,
                 project_id=_project_id(request),
                 rooms=_rooms(request),
+                include_group_metrics=False,
+                include_similar_layouts=False,
             ),
         },
     )
@@ -148,7 +152,15 @@ def developer_page(request: Request, developer_id: str) -> HTMLResponse:
 def layouts(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "report": build_report(_period_days(request), developer_scope="competitors")},
+        {
+            "request": request,
+            "report": build_report(
+                _period_days(request),
+                developer_scope="competitors",
+                include_group_metrics=True,
+                include_similar_layouts=False,
+            ),
+        },
     )
 
 
@@ -163,6 +175,8 @@ def developer_layouts(request: Request, developer_id: str) -> HTMLResponse:
                 developer_id=developer_id,
                 project_id=_project_id(request),
                 rooms=_rooms(request),
+                include_group_metrics=True,
+                include_similar_layouts=False,
             ),
         },
     )
@@ -180,6 +194,8 @@ def market(request: Request) -> HTMLResponse:
                 calc_mode=_calc_mode(request),
                 developer_id=_developer_id(request),
                 developer_scope=_market_mode(request),
+                include_group_metrics=False,
+                include_similar_layouts=False,
             ),
         },
     )
@@ -243,7 +259,7 @@ def price_dynamics_dashboard(request: Request) -> HTMLResponse:
 
 @app.get("/layouts/{layout_id:path}", response_class=HTMLResponse)
 def layout_detail(request: Request, layout_id: str) -> HTMLResponse:
-    report_data = build_report(_period_days(request))
+    report_data = build_report(_period_days(request), include_group_metrics=True, include_similar_layouts=True)
     layout = next((item for item in report_data["layouts"] if item["group_id"] == layout_id), None)
     if not layout:
         return templates.TemplateResponse(
@@ -264,6 +280,8 @@ def developer_layout_detail(request: Request, developer_id: str, layout_id: str)
         developer_id=developer_id,
         project_id=_project_id(request),
         rooms=_rooms(request),
+        include_group_metrics=True,
+        include_similar_layouts=True,
     )
     layout = next((item for item in report_data["layouts"] if item["group_id"] == layout_id), None)
     if not layout:
