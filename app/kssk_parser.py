@@ -141,12 +141,12 @@ class KsskParser:
         html: str,
     ) -> Flat:
         soup = BeautifulSoup(html, "html.parser")
-        title = soup.select_one(".layout-modal-base__title-text")
-        if not title:
+        title_text = self._extract_title_text(soup)
+        if not title_text:
             raise ValueError("title missing")
         features = self._feature_map(soup)
-        rooms = self._normalize_rooms(title.get_text(" ", strip=True))
-        area = self._parse_float(features.get("Площадь общая")) or self._parse_area_from_text(title.get_text(" ", strip=True))
+        rooms = self._normalize_rooms(title_text)
+        area = self._parse_float(features.get("Площадь общая")) or self._parse_area_from_text(title_text)
         floor = self._parse_int(features.get("Этаж"))
         price = self._parse_float(_text(soup.select_one(".layout-price-block__title")))
         code = features.get("Артикул") or features.get("Номер квартиры") or apartment_id
@@ -170,6 +170,20 @@ class KsskParser:
             image_url=image_url,
             layout_uuid=self._layout_uuid(image_url),
         )
+
+    def _extract_title_text(self, soup: BeautifulSoup) -> str:
+        selectors = [
+            ".layout-modal-base__title-text",
+            ".layout-modal-base__title h1",
+            ".layout-modal-base__title h2",
+            ".layout-modal-base__title h3",
+            ".layout-modal-base__title",
+        ]
+        for selector in selectors:
+            text = _text(soup.select_one(selector))
+            if text:
+                return text
+        return ""
 
     def _feature_map(self, soup: BeautifulSoup) -> Dict[str, str]:
         result: Dict[str, str] = {}

@@ -37,7 +37,7 @@ class KsskParserTest(unittest.TestCase):
         parser = KsskParser()
         html = """
         <div class="layout-modal-base apartment-modal">
-          <span class="layout-modal-base__title-text">3-комнатная, 83.5 м²</span>
+          <div class="layout-modal-base__title text__black-text"><h3>3-комнатная, 83.5 м²</h3></div>
           <ul class="layout-info-list apartment-modal__features">
             <li class="layout-info-list__item">
               <div class="layout-info-list__key">Номер квартиры</div>
@@ -87,6 +87,41 @@ class KsskParserTest(unittest.TestCase):
         self.assertEqual(flat.price, 9_352_000)
         self.assertEqual(flat.image_url, "https://scandinaviya.kssk.ru/uploads/thumbs/default/test-layout.jpg")
         self.assertEqual(flat.layout_uuid, "test-layout.jpg")
+
+    def test_parse_apartment_modal_with_legacy_title_selector(self) -> None:
+        parser = KsskParser()
+        html = """
+        <div class="layout-modal-base apartment-modal">
+          <span class="layout-modal-base__title-text">1-комнатная, 40.1 м²</span>
+          <ul class="layout-info-list apartment-modal__features">
+            <li class="layout-info-list__item">
+              <div class="layout-info-list__key">Номер квартиры</div>
+              <div class="layout-info-list__value">19</div>
+            </li>
+            <li class="layout-info-list__item">
+              <div class="layout-info-list__key">Адрес</div>
+              <div class="layout-info-list__value">ул. Михеева, 1</div>
+            </li>
+          </ul>
+          <div class="layout-price-block__title">4 100 000 ₽</div>
+          <div id="layout-modal-tab-1">
+            <img class="layout-tabs-block__image" src="/uploads/thumbs/default/legacy-layout.jpg" alt="План квартиры"/>
+          </div>
+        </div>
+        """
+        flat = parser._parse_apartment_modal(
+            "https://scandinaviya.kssk.ru/",
+            "scandinaviya",
+            "Скандинавия",
+            "19",
+            html,
+        )
+        parser.close()
+
+        self.assertEqual(flat.rooms, "1К")
+        self.assertEqual(flat.area, 40.1)
+        self.assertEqual(flat.price, 4_100_000)
+        self.assertEqual(flat.house_id, "scandinaviya:ул-михеева-1")
 
 
 if __name__ == "__main__":
