@@ -1,0 +1,76 @@
+name: Refresh Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      developer_id:
+        description: "ID застройщика или all"
+        required: false
+        default: "all"
+  schedule:
+    - cron: "30 2 * * *"
+
+jobs:
+  refresh-single:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.developer_id != 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Refresh selected developer
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OBJECTIV_ACCESS_TOKEN: ${{ secrets.OBJECTIV_ACCESS_TOKEN }}
+          KSM_PHPSESSID: ${{ secrets.KSM_PHPSESSID }}
+          USE_LOCAL_IMAGE_FILES: "0"
+        run: |
+          python scripts/refresh_data.py --developer-id "${{ github.event.inputs.developer_id }}" --no-report
+
+  refresh-all:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.developer_id == 'all')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        developer_id:
+          - zhcom
+          - sretensky
+          - kssk
+          - smu5
+          - stroysoyuz
+          - altaistroy
+          - profstroy
+          - ksm
+          - avitek
+          - mayakovskaya
+          - kino_development
+          - arso_group
+          - gipromstroy
+          - moy_dom
+          - stroycity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Refresh developer
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OBJECTIV_ACCESS_TOKEN: ${{ secrets.OBJECTIV_ACCESS_TOKEN }}
+          KSM_PHPSESSID: ${{ secrets.KSM_PHPSESSID }}
+          USE_LOCAL_IMAGE_FILES: "0"
+        run: |
+          python scripts/refresh_data.py --developer-id "${{ matrix.developer_id }}" --no-report

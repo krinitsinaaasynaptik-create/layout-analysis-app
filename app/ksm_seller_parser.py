@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from math import ceil
 from typing import Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
@@ -40,27 +42,45 @@ class KsmSellerParser:
 
         flats_by_id: Dict[str, Flat] = {}
         houses_by_id: Dict[str, House] = {}
-        next_url = self.base_url
-        source_total = 0
-        page_index = 1
+        first_html = self._fetch(self.base_url)
+        (CACHE_DIR / "ksm_seller_apartments.html").write_text(first_html, encoding="utf-8")
+        first_page_flats, source_total, _ = self._parse_listing_page(first_html, self.base_url)
+        for flat in first_page_flats:
+            flats_by_id[flat.flat_id] = flat
+            houses_by_id.setdefault(
+                flat.house_id,
+                House(
+                    project_id=flat.project_id,
+                    project_name=flat.project_name,
+                    house_id=flat.house_id,
+                    house_name=flat.house_name,
+                ),
+            )
 
-        while next_url:
-            html_text = self._fetch(next_url)
-            if page_index == 1:
-                (CACHE_DIR / "ksm_seller_apartments.html").write_text(html_text, encoding="utf-8")
-            page_flats, source_total, next_url = self._parse_listing_page(html_text, next_url)
-            for flat in page_flats:
-                flats_by_id[flat.flat_id] = flat
-                houses_by_id.setdefault(
-                    flat.house_id,
-                    House(
-                        project_id=flat.project_id,
-                        project_name=flat.project_name,
-                        house_id=flat.house_id,
-                        house_name=flat.house_name,
-                    ),
-                )
-            page_index += 1
+        first_page_count = max(len(first_page_flats), 1)
+        total_pages = ceil((source_total or len(first_page_flats)) / first_page_count)
+        if total_pages > 1:
+            page_urls = [
+                f"{self.base_url}?Pagination_1={page_number}"
+                for page_number in range(2, total_pages + 1)
+            ]
+            with ThreadPoolExecutor(max_workers=min(12, len(page_urls))) as executor:
+                futures = {executor.submit(self._fetch, page_url): page_url for page_url in page_urls}
+                for future in as_completed(futures):
+                    page_url = futures[future]
+                    html_text = future.result()
+                    page_flats, _, _ = self._parse_listing_page(html_text, page_url)
+                    for flat in page_flats:
+                        flats_by_id[flat.flat_id] = flat
+                        houses_by_id.setdefault(
+                            flat.house_id,
+                            House(
+                                project_id=flat.project_id,
+                                project_name=flat.project_name,
+                                house_id=flat.house_id,
+                                house_name=flat.house_name,
+                            ),
+                        )
 
         houses = sorted(houses_by_id.values(), key=lambda item: (item.project_name, item.house_name))
         flats = sorted(flats_by_id.values(), key=lambda item: (item.project_name, item.house_name, item.floor or 0, item.code))

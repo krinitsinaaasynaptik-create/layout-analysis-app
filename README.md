@@ -53,6 +53,40 @@ uvicorn app.main:app --host 127.0.0.1 --port 8002
 - Интерфейс больше не зависит от локальной папки с картинками.
 - `/api/refresh` на Vercel все еще может упираться в лимиты serverless по времени, потому что это длинный парсинг. Для production лучше выносить обновление данных в отдельный job/worker.
 
+## Отдельный refresh worker / cron
+
+В проект добавлены:
+
+- CLI-скрипт: `scripts/refresh_data.py`
+- GitHub Actions workflow: `.github/workflows/refresh-data.yml`
+
+### Локальный запуск worker
+
+```bash
+export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require'
+export OBJECTIV_ACCESS_TOKEN='...'
+export KSM_PHPSESSID='...'
+./.venv/bin/python scripts/refresh_data.py --developer-id ksm --no-report
+```
+
+Для полного прохода по одному застройщику укажите его `id`.  
+Если `--developer-id` не передан, скрипт прогонит все targets.
+
+### GitHub Actions secrets
+
+Для cron в GitHub нужно задать secrets:
+
+- `DATABASE_URL`
+- `OBJECTIV_ACCESS_TOKEN`
+- `KSM_PHPSESSID`
+
+### Как это работает
+
+- Vercel остается только интерфейсом;
+- worker запускается в GitHub Actions по cron или вручную;
+- результаты refresh пишутся прямо в Postgres;
+- фронт на Vercel читает уже обновленные данные из Postgres.
+
 ## Что делает сервис
 
 - собирает квартиры с `https://zhcom.ru/flats`;
