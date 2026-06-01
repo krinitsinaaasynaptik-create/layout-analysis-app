@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from .db import finish_run, start_run
 from .grouping import build_layout_groups
 from .ksm_seller_parser import KsmSellerParser
+from .kssk_parser import KsskParser
 from .objectiv_house_metadata import enrich_houses_with_objectiv_metadata
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
@@ -22,6 +23,10 @@ def build_parser(target_id: str, objectiv_access_token: str, ksm_session_id: str
         return (target.id, target.name, target.developer_type, target.source_url, target.source, ZhcomParser())
     if target.source == "sretensky":
         return (target.id, target.name, target.developer_type, target.source_url, target.source, SretenskyParser())
+    if target.source == "kssk":
+        if not objectiv_access_token:
+            raise RuntimeError("КССК: нужен токен Объектива для метаданных по домам.")
+        return (target.id, target.name, target.developer_type, target.source_url, target.source, KsskParser())
     if target.source == "ksm_seller":
         if not ksm_session_id:
             raise RuntimeError("КСМ: нужна PHP-сессия кабинета менеджера.")
@@ -70,7 +75,7 @@ def run_refresh(
         for item_developer_id, developer_name, developer_type, source_url, source, parser in parsers:
             try:
                 houses, flats, source_total = parser.parse()
-                if objectiv_access_token and item_developer_id in {"zhcom", "sretensky", "ksm"}:
+                if objectiv_access_token and item_developer_id in {"zhcom", "sretensky", "ksm", "kssk"}:
                     houses = enrich_houses_with_objectiv_metadata(
                         houses,
                         developer_id=item_developer_id,

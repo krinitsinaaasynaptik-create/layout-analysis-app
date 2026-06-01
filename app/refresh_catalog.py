@@ -24,7 +24,7 @@ class RefreshTarget:
 REFRESH_TARGETS = [
     RefreshTarget("zhcom", "Железно", "competitor", "https://zhcom.ru/kirov/flats?limit=16", "zhcom"),
     RefreshTarget("sretensky", "Сретенский посад", "competitor", "https://xn--b1aakjajcf0abexf2n.xn--p1ai/plans#plans", "sretensky"),
-    RefreshTarget("kssk", "КССК", "own", "https://объектив.рф/ProjectCards", "objectiv", "КССК"),
+    RefreshTarget("kssk", "КССК", "own", "https://kvartiry.kssk.ru/", "kssk", "КССК"),
     RefreshTarget("smu5", "СМУ-5", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "СМУ-5"),
     RefreshTarget("stroysoyuz", "Стройсоюз", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Стройсоюз"),
     RefreshTarget("altaistroy", "АлтайСтрой", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "АлтайСтрой"),
