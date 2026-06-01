@@ -39,6 +39,8 @@ def main() -> int:
     )
     if "report" in payload:
         payload = {key: value for key, value in payload.items() if key != "report"}
+    if not payload.get("ok"):
+        print(f"ERROR: {payload.get('message', 'unknown error')}", file=sys.stderr)
     print(json.dumps(payload, ensure_ascii=False))
     return 0 if payload.get("ok") else 1
 
