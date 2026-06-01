@@ -18,6 +18,7 @@ BASE_URL = "https://zhcom.ru"
 CATALOG_URL = f"{BASE_URL}/kirov/flats?limit=16"
 KSSK_CATALOG_URL = "https://kvartiry.kssk.ru/"
 OBJECTIV_BASE_URL = "https://xn--90acimjv5a2d.xn--p1ai"
+KSM_SELLER_URL = "https://ksm-kirov.ru/seller/flats/apartments"
 PHASH_THRESHOLD = 8
 
 

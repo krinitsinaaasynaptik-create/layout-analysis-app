@@ -40,6 +40,10 @@
           <input id="objectivTokenInput" type="password" autocomplete="off" placeholder="access_token для Объектива">
         </label>
         <p>Поле можно оставить пустым, если токен уже задан в окружении сервиса.</p>
+        <label>Сессия КСМ
+          <input id="ksmSessionInput" type="password" autocomplete="off" placeholder="PHPSESSID из кабинета КСМ">
+        </label>
+        <p>Нужна только для обновления КСМ через кабинет менеджера.</p>
       </div>
       <div class="refresh-target-list">
         {% for item in report.refresh_targets %}
@@ -61,6 +65,7 @@
               data-refresh-developer="{{ item.id }}"
               data-refresh-name="{{ item.name }}"
               {% if item.requires_objectiv_token %}data-requires-token="1"{% endif %}
+              {% if item.requires_ksm_session %}data-requires-ksm-session="1"{% endif %}
             >
               Обновить
             </button>

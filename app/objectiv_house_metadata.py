@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
+from datetime import date
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .models import House
@@ -11,6 +12,7 @@ from .objectiv_parser import ObjectivParser
 OBJECTIV_GROUP_BY_DEVELOPER = {
     "zhcom": "Железно",
     "sretensky": "Сретенский посад",
+    "ksm": "КСМ",
 }
 
 MANUAL_OBJECTIV_MAPPING = {
@@ -36,10 +38,10 @@ def enrich_houses_with_objectiv_metadata(
     finally:
         parser.close()
 
-    metadata_by_key = {
-        _objective_match_key(developer_id, item.project_name, item.house_name): item
-        for item in objective_houses
-    }
+    metadata_by_key: Dict[Tuple[str, str], House] = {}
+    for item in objective_houses:
+        key = _objective_match_key(developer_id, item.project_name, item.house_name)
+        metadata_by_key[key] = _merge_house_metadata(metadata_by_key.get(key), item)
 
     enriched: List[House] = []
     for house in house_list:
@@ -64,6 +66,27 @@ def enrich_houses_with_objectiv_metadata(
             )
         )
     return enriched
+
+
+def _merge_house_metadata(base: House | None, incoming: House) -> House:
+    if base is None:
+        return incoming
+    total_apartments = _sum_optional(base.total_apartments, incoming.total_apartments)
+    deal_apartments_count = _sum_optional(base.deal_apartments_count, incoming.deal_apartments_count)
+    return replace(
+        base,
+        total_apartments=total_apartments,
+        deal_apartments_count=deal_apartments_count,
+        commissioning_date=_max_date(base.commissioning_date, incoming.commissioning_date),
+        actual_commissioning_date=_max_date(base.actual_commissioning_date, incoming.actual_commissioning_date),
+        sales_start_date=_min_date(base.sales_start_date, incoming.sales_start_date),
+        avg_deal_exposure_days=_weighted_avg(
+            base.avg_deal_exposure_days,
+            base.deal_apartments_count,
+            incoming.avg_deal_exposure_days,
+            incoming.deal_apartments_count,
+        ),
+    )
 
 
 def _site_match_key(developer_id: str, project_name: str, house_name: str) -> Tuple[str, str]:
@@ -113,3 +136,52 @@ def _normalize_building(developer_id: str, value: Any, *, objective: bool) -> st
     if "/" in candidate and developer_id in {"zhcom", "sretensky"}:
         candidate = candidate.replace("/", ".")
     return candidate.replace("/", ".") if objective else candidate
+
+
+def _sum_optional(left: int | None, right: int | None) -> int | None:
+    if left is None and right is None:
+        return None
+    return int(left or 0) + int(right or 0)
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _max_date(left: str | None, right: str | None) -> str | None:
+    left_date = _parse_iso_date(left)
+    right_date = _parse_iso_date(right)
+    if left_date and right_date:
+        return left if left_date >= right_date else right
+    return left or right
+
+
+def _min_date(left: str | None, right: str | None) -> str | None:
+    left_date = _parse_iso_date(left)
+    right_date = _parse_iso_date(right)
+    if left_date and right_date:
+        return left if left_date <= right_date else right
+    return left or right
+
+
+def _weighted_avg(
+    left_value: float | None,
+    left_weight: int | None,
+    right_value: float | None,
+    right_weight: int | None,
+) -> float | None:
+    weighted_parts = []
+    if left_value is not None and left_weight:
+        weighted_parts.append((left_value, left_weight))
+    if right_value is not None and right_weight:
+        weighted_parts.append((right_value, right_weight))
+    if weighted_parts:
+        total_weight = sum(weight for _, weight in weighted_parts)
+        return round(sum(value * weight for value, weight in weighted_parts) / total_weight, 1)
+    return left_value if left_value is not None else right_value

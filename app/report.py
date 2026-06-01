@@ -851,6 +851,7 @@ def _refresh_targets_for_display() -> List[Dict[str, Any]]:
                 "type": latest.get("type") or target.developer_type,
                 "latest_snapshot_at": latest.get("latest_snapshot_at"),
                 "requires_objectiv_token": target.requires_objectiv_token,
+                "requires_ksm_session": target.requires_ksm_session,
             }
         )
     return items
@@ -1836,6 +1837,7 @@ def _market_sellout_status(
     sales_start_date: Any,
     house_id: Any,
 ) -> Dict[str, Any]:
+    target_percent = 80.0
     total = int(total_apartments or 0)
     is_objectiv_house = str(house_id or "").startswith("objectiv:")
     if total <= 0 or current_available > total:
@@ -1913,8 +1915,9 @@ def _market_sellout_status(
             "sort_value": round(current_percent, 2),
         }
 
-    monthly_plan = total / total_months
-    expected_deals_to_date = min(float(total), max(0.0, monthly_plan * min(elapsed_months, total_months)))
+    target_deals_total = total * (target_percent / 100.0)
+    monthly_plan = target_deals_total / total_months
+    expected_deals_to_date = min(target_deals_total, max(0.0, monthly_plan * min(elapsed_months, total_months)))
     expected_percent = m.percent(expected_deals_to_date, total)
     status = "В норме" if current_deal_count >= expected_deals_to_date else "Отклонение"
     tone = "positive" if current_deal_count >= expected_deals_to_date else "negative"
@@ -1924,6 +1927,7 @@ def _market_sellout_status(
             "",
             f"Дата старта продаж: {_format_date(sales_start_dt)}",
             f"Дата ввода: {_format_date(commission_dt)}",
+            f"Цель к вводу: {_format_percent(target_percent)}",
             f"План продаж: {_format_int(monthly_plan)} квартир/мес.",
             f"Должно быть в сделке к текущей дате: {_format_int(expected_deals_to_date)} квартир ({_format_percent(expected_percent)})",
             f"Фактически в сделке: {_format_int(current_deal_count)} квартир ({percent_label})",

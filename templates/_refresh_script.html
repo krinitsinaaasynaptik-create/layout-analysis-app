@@ -4,6 +4,7 @@
   const refreshModalBackdrop = document.getElementById('refreshModalBackdrop');
   const refreshModalClose = document.getElementById('refreshModalClose');
   const objectivTokenInput = document.getElementById('objectivTokenInput');
+  const ksmSessionInput = document.getElementById('ksmSessionInput');
   const refreshTargetButtons = Array.from(document.querySelectorAll('[data-refresh-developer]'));
 
   function notifyRefresh(message) {
@@ -32,9 +33,15 @@
     const developerId = button.dataset.refreshDeveloper;
     const developerName = button.dataset.refreshName || 'застройщик';
     const requiresToken = button.dataset.requiresToken === '1';
+    const requiresKsmSession = button.dataset.requiresKsmSession === '1';
     if (requiresToken && objectivTokenInput && !objectivTokenInput.value.trim()) {
       objectivTokenInput.focus();
       notifyRefresh(`Для ${developerName} нужен токен Объектива.`);
+      return;
+    }
+    if (requiresKsmSession && ksmSessionInput && !ksmSessionInput.value.trim()) {
+      ksmSessionInput.focus();
+      notifyRefresh(`Для ${developerName} нужна сессия кабинета КСМ.`);
       return;
     }
     button.disabled = true;
@@ -45,7 +52,10 @@
       const response = await fetch(`/api/refresh/${developerId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ objectiv_access_token: objectivTokenInput ? objectivTokenInput.value.trim() : '' })
+        body: JSON.stringify({
+          objectiv_access_token: objectivTokenInput ? objectivTokenInput.value.trim() : '',
+          ksm_session_id: ksmSessionInput ? ksmSessionInput.value.trim() : '',
+        })
       });
       const payload = await response.json();
       notifyRefresh(payload.message || 'Готово');

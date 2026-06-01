@@ -116,6 +116,7 @@ def _refresh_targets_for_display() -> List[Dict[str, Any]]:
             "type": latest_by_id.get(target.id, {}).get("type") or target.developer_type,
             "latest_snapshot_at": latest_by_id.get(target.id, {}).get("latest_snapshot_at"),
             "requires_objectiv_token": target.requires_objectiv_token,
+            "requires_ksm_session": target.requires_ksm_session,
         }
         for target in REFRESH_TARGETS
     ]

@@ -14,7 +14,11 @@ class RefreshTarget:
 
     @property
     def requires_objectiv_token(self) -> bool:
-        return self.source == "objectiv"
+        return self.source == "objectiv" or self.id == "ksm"
+
+    @property
+    def requires_ksm_session(self) -> bool:
+        return self.source == "ksm_seller"
 
 
 REFRESH_TARGETS = [
@@ -25,7 +29,7 @@ REFRESH_TARGETS = [
     RefreshTarget("stroysoyuz", "Стройсоюз", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Стройсоюз"),
     RefreshTarget("altaistroy", "АлтайСтрой", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "АлтайСтрой"),
     RefreshTarget("profstroy", "Профстрой", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Профстрой"),
-    RefreshTarget("ksm", "КСМ", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "КСМ"),
+    RefreshTarget("ksm", "КСМ", "competitor", "https://ksm-kirov.ru/seller/flats/apartments", "ksm_seller", "КСМ"),
     RefreshTarget("avitek", "Авитек", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Авитек"),
     RefreshTarget("mayakovskaya", "Маяковская", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Маяковская"),
     RefreshTarget("kino_development", "Кино Девелопмент", "competitor", "https://объектив.рф/ProjectCards", "objectiv", "Кино Девелопмент"),
@@ -36,4 +40,3 @@ REFRESH_TARGETS = [
 ]
 
 REFRESH_TARGET_BY_ID = {target.id: target for target in REFRESH_TARGETS}
-

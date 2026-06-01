@@ -21,6 +21,7 @@ from .db import (
     update_layout_tags,
 )
 from .grouping import build_layout_groups
+from .ksm_seller_parser import KsmSellerParser
 from .objectiv_house_metadata import enrich_houses_with_objectiv_metadata
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
@@ -39,7 +40,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.mount("/data-images", StaticFiles(directory=IMAGE_DIR), name="data-images")
 
 
-def _build_parser(target_id: str, objectiv_access_token: str):
+def _build_parser(target_id: str, objectiv_access_token: str, ksm_session_id: str):
     target = REFRESH_TARGET_BY_ID.get(target_id)
     if not target:
         raise RuntimeError("Неизвестный застройщик для обновления.")
@@ -47,6 +48,19 @@ def _build_parser(target_id: str, objectiv_access_token: str):
         return (target.id, target.name, target.developer_type, target.source_url, target.source, ZhcomParser())
     if target.source == "sretensky":
         return (target.id, target.name, target.developer_type, target.source_url, target.source, SretenskyParser())
+    if target.source == "ksm_seller":
+        if not ksm_session_id:
+            raise RuntimeError("КСМ: нужна PHP-сессия кабинета менеджера.")
+        if not objectiv_access_token:
+            raise RuntimeError("КСМ: нужен токен Объектива для метаданных по домам.")
+        return (
+            target.id,
+            target.name,
+            target.developer_type,
+            target.source_url,
+            target.source,
+            KsmSellerParser(session_id=ksm_session_id),
+        )
     if not objectiv_access_token:
         raise RuntimeError(f"{target.name}: нужен токен Объектива.")
     return (
@@ -59,14 +73,14 @@ def _build_parser(target_id: str, objectiv_access_token: str):
     )
 
 
-def _refresh_parsers(objectiv_access_token: str, developer_id: Optional[str] = None):
+def _refresh_parsers(objectiv_access_token: str, ksm_session_id: str, developer_id: Optional[str] = None):
     target_ids = [developer_id] if developer_id else [target.id for target in REFRESH_TARGETS]
-    return [_build_parser(target_id, objectiv_access_token) for target_id in target_ids]
+    return [_build_parser(target_id, objectiv_access_token, ksm_session_id) for target_id in target_ids]
 
 
-def _run_refresh(objectiv_access_token: str, developer_id: Optional[str] = None) -> JSONResponse:
+def _run_refresh(objectiv_access_token: str, ksm_session_id: str, developer_id: Optional[str] = None) -> JSONResponse:
     try:
-        parsers = _refresh_parsers(objectiv_access_token, developer_id)
+        parsers = _refresh_parsers(objectiv_access_token, ksm_session_id, developer_id)
     except Exception as exc:
         return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
     run_id = start_run()
@@ -79,7 +93,7 @@ def _run_refresh(objectiv_access_token: str, developer_id: Optional[str] = None)
         for item_developer_id, developer_name, developer_type, source_url, source, parser in parsers:
             try:
                 houses, flats, source_total = parser.parse()
-                if objectiv_access_token and item_developer_id in {"zhcom", "sretensky"}:
+                if objectiv_access_token and item_developer_id in {"zhcom", "sretensky", "ksm"}:
                     houses = enrich_houses_with_objectiv_metadata(
                         houses,
                         developer_id=item_developer_id,
@@ -310,7 +324,8 @@ async def refresh(request: Request) -> JSONResponse:
     except Exception:
         body = {}
     objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
-    return _run_refresh(objectiv_access_token)
+    ksm_session_id = (body.get("ksm_session_id") or os.environ.get("KSM_PHPSESSID") or "").strip()
+    return _run_refresh(objectiv_access_token, ksm_session_id)
 
 
 @app.post("/api/refresh/{developer_id}")
@@ -320,7 +335,8 @@ async def refresh_developer(developer_id: str, request: Request) -> JSONResponse
     except Exception:
         body = {}
     objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
-    return _run_refresh(objectiv_access_token, developer_id.strip())
+    ksm_session_id = (body.get("ksm_session_id") or os.environ.get("KSM_PHPSESSID") or "").strip()
+    return _run_refresh(objectiv_access_token, ksm_session_id, developer_id.strip())
 
 
 @app.get("/api/report")
