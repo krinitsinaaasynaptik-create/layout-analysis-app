@@ -77,6 +77,7 @@ def developer_page(request: Request, developer_id: str) -> HTMLResponse:
                 _period_days(request),
                 developer_id=developer_id,
                 project_id=_project_id(request),
+                history_project_id=_history_project_id(request),
                 rooms=_rooms(request),
                 include_group_metrics=False,
                 include_similar_layouts=False,
@@ -381,6 +382,11 @@ def _developer_id(request: Request) -> Optional[str]:
 
 def _project_id(request: Request) -> Optional[str]:
     value = (request.query_params.get("project_id") or "").strip()
+    return value or None
+
+
+def _history_project_id(request: Request) -> Optional[str]:
+    value = (request.query_params.get("history_project_id") or "").strip()
     return value or None
 
 

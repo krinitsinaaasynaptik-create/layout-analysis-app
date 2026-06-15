@@ -246,6 +246,18 @@ def _schema_sql(backend: str) -> str:
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS objectiv_project_history_monthly (
+            id {serial},
+            developer_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            month_key TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            avg_price_per_sqm REAL,
+            apartments_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS layout_tags (
             id {serial},
             name TEXT NOT NULL UNIQUE,
@@ -697,6 +709,40 @@ def replace_data(
         return snapshot_id
 
 
+def replace_objectiv_project_history_monthly(
+    developer_id: str,
+    rows: Iterable[Dict[str, Any]],
+) -> None:
+    items = list(rows)
+    now = datetime.now().isoformat(timespec="seconds")
+    with connect() as conn:
+        conn.execute("DELETE FROM objectiv_project_history_monthly WHERE developer_id = ?", (developer_id,))
+        if not items:
+            return
+        conn.executemany(
+            """
+            INSERT INTO objectiv_project_history_monthly (
+                developer_id, project_id, project_name, month_key, snapshot_date,
+                avg_price_per_sqm, apartments_count, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    developer_id,
+                    str(item.get("project_id") or ""),
+                    str(item.get("project_name") or ""),
+                    str(item.get("month_key") or ""),
+                    str(item.get("snapshot_date") or ""),
+                    item.get("avg_price_per_sqm"),
+                    int(item.get("apartments_count") or 0),
+                    now,
+                )
+                for item in items
+            ],
+        )
+
+
 def _create_snapshot(
     conn: DBConnection,
     developer_id: str,
@@ -791,6 +837,9 @@ def fetch_report_rows() -> Dict[str, List[Any]]:
             "snapshots": conn.execute("SELECT * FROM snapshots ORDER BY collected_at").fetchall(),
             "apartment_snapshots": conn.execute(
                 "SELECT * FROM apartment_snapshots ORDER BY created_at, id"
+            ).fetchall(),
+            "objectiv_project_history_monthly": conn.execute(
+                "SELECT * FROM objectiv_project_history_monthly ORDER BY project_name, month_key"
             ).fetchall(),
             "layout_tags": conn.execute("SELECT * FROM layout_tags ORDER BY name").fetchall(),
             "layout_group_tags": conn.execute(

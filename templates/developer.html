@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ report.selected_developer.name if report.selected_developer else report.competitor }} — аналитика застройщика</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+  <link rel="stylesheet" href="/static/style.css?v=20260615-1">
 </head>
 <body>
   {% set developer_name = report.selected_developer.name if report.selected_developer else report.competitor %}
@@ -122,6 +122,79 @@
           </div>
         </article>
       </section>
+
+      {% if report.project_price_history %}
+        {% set price_history = report.project_price_history %}
+        <section class="panel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>Средняя цена за м² по проекту</h2>
+              <span>Помесячно, по срезам Объектива от старта продаж до последней доступной выгрузки</span>
+            </div>
+            {% if report.filters.history_project_options %}
+              <form class="inline-filter-form" method="get" action="/developers/{{ report.selected_developer.id }}">
+                <input type="hidden" name="period_days" value="{{ report.filters.period_days }}">
+                <input type="hidden" name="project_id" value="{{ report.filters.project_id }}">
+                <input type="hidden" name="rooms" value="{{ report.filters.rooms }}">
+                <label>Проект
+                  <select name="history_project_id" onchange="this.form.submit()">
+                    {% for project in report.filters.history_project_options %}
+                      <option value="{{ project.id }}" {% if report.filters.history_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+              </form>
+            {% endif %}
+          </div>
+
+          {% if price_history.available %}
+            <div class="metrics metrics-four compact-metrics">
+              <div>
+                <span>{% if price_history.stats.first_value is not none %}{{ "{:,.0f}".format(price_history.stats.first_value).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
+                <p>первый доступный месяц</p>
+              </div>
+              <div>
+                <span>{% if price_history.stats.current_value is not none %}{{ "{:,.0f}".format(price_history.stats.current_value).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
+                <p>текущий месяц</p>
+              </div>
+              <div>
+                <span>{% if price_history.stats.change_abs is not none %}{{ "{:+,.0f}".format(price_history.stats.change_abs).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
+                <p>изменение за период</p>
+              </div>
+              <div>
+                <span>{% if price_history.stats.change_pct is not none %}{{ "{:+.1f}".format(price_history.stats.change_pct).replace(".", ",") }}%{% else %}н/д{% endif %}</span>
+                <p>{{ price_history.stats.months_with_values }} мес. с данными</p>
+              </div>
+            </div>
+
+            <div class="history-meta">
+              {% if price_history.stats.sales_start_date %}<span>Старт продаж: {{ price_history.stats.sales_start_date }}</span>{% endif %}
+              {% if price_history.stats.latest_snapshot_date %}<span>Последний срез: {{ price_history.stats.latest_snapshot_date }}</span>{% endif %}
+              <span>Проект: {{ price_history.selected_project_name }}</span>
+            </div>
+
+            <div class="history-chart-wrap">
+              <svg class="history-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="none" aria-label="График средней цены за квадратный метр">
+                {% for tick in price_history.chart.y_ticks %}
+                  <line x1="22" y1="{{ tick.y }}" x2="742" y2="{{ tick.y }}"></line>
+                  <text x="0" y="{{ tick.y + 4 }}">{{ tick.label }}</text>
+                {% endfor %}
+                {% if price_history.chart.path %}
+                  <path d="{{ price_history.chart.path }}"></path>
+                {% endif %}
+                {% for point in price_history.chart.points %}
+                  <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+                {% endfor %}
+                {% for label in price_history.chart.x_labels %}
+                  <text class="x-label" x="{{ label.x }}" y="212">{{ label.label }}</text>
+                {% endfor %}
+              </svg>
+            </div>
+          {% else %}
+            <p class="muted">{{ price_history.message }}</p>
+          {% endif %}
+        </section>
+      {% endif %}
 
       <section class="metrics metrics-six" id="dynamics">
         <div><span>{{ analytics.top1_layout_share }}%</span><p title="Доля самой массовой типовой планировки">доля топ-1</p></div>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin
@@ -15,6 +16,7 @@ from .parser import REQUEST_HEADERS
 
 SALE_STATUS = "В продаже"
 DEAL_STATUS = "Сделка"
+WASHOUT_STATUS = "Вымывание"
 
 
 class ObjectivParser:
@@ -67,6 +69,47 @@ class ObjectivParser:
         houses = sorted(houses_by_id.values(), key=lambda item: (item.project_name, item.house_name))
         flats = sorted(flats, key=lambda item: (item.project_name, item.house_name, item.floor or 0, item.code))
         return houses, flats, source_total
+
+    def build_monthly_project_history(self) -> List[Dict[str, Any]]:
+        if not self.access_token:
+            raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
+
+        group_id = self._group_id()
+        projects = self._get_json("/api/ProjectCards/GetGroupProjects", params={"groupId": group_id}).get("projects") or []
+        project_rows: List[Dict[str, Any]] = []
+
+        for item in projects:
+            project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
+            prices_by_month: Dict[str, List[float]] = defaultdict(list)
+            counts_by_month: Dict[str, int] = defaultdict(int)
+            snapshot_date_by_month: Dict[str, str] = {}
+            for oks in project.get("okses") or []:
+                oks_id = int(oks["id"])
+                on_date = self._latest_grid_date(oks_id)
+                grid = self._get_json("/api/ProjectCards/GetOksGrid", params={"oksId": oks_id, "onDate": on_date})
+                lots = self._grid_lots(grid)
+                for month_key, price_per_sqm in self._history_entries_for_lots(lots, snapshot_date=on_date):
+                    prices_by_month[month_key].append(price_per_sqm)
+                    counts_by_month[month_key] += 1
+                    current_date = snapshot_date_by_month.get(month_key)
+                    if current_date is None or on_date > current_date:
+                        snapshot_date_by_month[month_key] = on_date
+            for month_key in sorted(prices_by_month):
+                prices = prices_by_month[month_key]
+                if not prices:
+                    continue
+                project_rows.append(
+                    {
+                        "project_id": f"objectiv:{project['id']}",
+                        "project_name": str(project.get("name") or project.get("projectName") or project["id"]),
+                        "month_key": month_key,
+                        "snapshot_date": snapshot_date_by_month.get(month_key, ""),
+                        "avg_price_per_sqm": round(sum(prices) / len(prices), 2),
+                        "apartments_count": counts_by_month.get(month_key, 0),
+                    }
+                )
+
+        return sorted(project_rows, key=lambda item: (str(item.get("project_name") or ""), str(item.get("month_key") or "")))
 
     def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         response = self.client.get(urljoin(self.base_url, path), params=params)
@@ -169,6 +212,44 @@ class ObjectivParser:
                 )
             )
         return flats
+
+    def _history_entries_for_lots(self, lots: List[Dict[str, Any]], *, snapshot_date: str) -> List[Tuple[str, float]]:
+        values: List[Tuple[str, float]] = []
+        current_month = snapshot_date[:7]
+        for lot in lots:
+            if lot.get("type") != "квартира":
+                continue
+            status = lot.get("status") or {}
+            price_per_meter = self._float(status.get("pricePerMeter"))
+            if price_per_meter is None:
+                area = self._float(lot.get("area"))
+                price = self._float(status.get("price"))
+                if area and price:
+                    price_per_meter = price / area
+            if price_per_meter is None:
+                continue
+            status_name = str(status.get("status") or "").strip()
+            month_key = self._history_month_key(lot, status_name=status_name, current_month=current_month)
+            if not month_key:
+                continue
+            values.append((month_key, price_per_meter))
+        return values
+
+    def _history_month_key(self, lot: Dict[str, Any], *, status_name: str, current_month: str) -> str | None:
+        status = lot.get("status") or {}
+        if status_name == SALE_STATUS:
+            return current_month
+        if status_name == DEAL_STATUS:
+            return self._month_prefix(lot.get("contractDate")) or self._month_prefix(lot.get("registrationDate")) or self._month_prefix(status.get("currentStatusStartDate"))
+        if status_name == WASHOUT_STATUS:
+            return self._month_prefix(status.get("currentStatusStartDate")) or self._month_prefix(lot.get("registrationDate")) or self._month_prefix(lot.get("contractDate"))
+        return None
+
+    def _month_prefix(self, value: Any) -> str | None:
+        text = str(value or "").strip()
+        if len(text) >= 7:
+            return text[:7]
+        return None
 
     def _flat_id(self, house_id: str, code: str, fallback: str) -> str:
         normalized_code = "".join(char if char.isalnum() else "-" for char in code.strip().lower()).strip("-")

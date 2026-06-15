@@ -74,6 +74,70 @@ class ObjectivParserTest(unittest.TestCase):
         self.assertEqual(parser._flat_id("objectiv:24606", " 12/1 ", "3649663"), "objectiv:24606:12-1")
         parser.close()
 
+    def test_build_monthly_project_history_aggregates_latest_day_of_month(self) -> None:
+        parser = ObjectivParser(group_name="Железно", access_token="test")
+
+        def fake_get_json(path, params=None):  # type: ignore[no-untyped-def]
+            params = params or {}
+            if path == "/api/ProjectCards/GetGroups":
+                return {"groups": [{"id": 1, "name": "Железно"}]}
+            if path == "/api/ProjectCards/GetGroupProjects":
+                return {"projects": [{"id": 101}]}
+            if path == "/api/ProjectCards/GetProjectInfo":
+                return {"id": 101, "name": "ZNAK", "okses": [{"id": 5001}, {"id": 5002}]}
+            if path == "/api/ProjectCards/getGridIntervals":
+                return {"years": [{"value": 2026, "months": [{"value": 5, "days": [13, 26]}]}]}
+            if path == "/api/ProjectCards/GetOksGrid" and params == {"oksId": 5001, "onDate": "2026-05-26"}:
+                return {
+                    "sections": [{"floors": [{"gridLots": [
+                        {"type": "квартира", "area": 40.0, "status": {"status": "В продаже", "price": 4_800_000, "pricePerMeter": 120000}},
+                        {"type": "квартира", "area": 42.0, "contractDate": "2026-02-10T00:00:00", "status": {"status": "Сделка", "price": 3_990_000, "pricePerMeter": 95000, "currentStatusStartDate": "2026-02-20T00:00:00"}},
+                        {"type": "квартира", "area": 43.0, "status": {"status": "Вымывание", "price": 4_300_000, "pricePerMeter": 100000, "currentStatusStartDate": "2026-04-02T00:00:00"}},
+                    ]}]}]
+                }
+            if path == "/api/ProjectCards/GetOksGrid" and params == {"oksId": 5002, "onDate": "2026-05-26"}:
+                return {
+                    "sections": [{"floors": [{"gridLots": [
+                        {"type": "квартира", "area": 55.0, "contractDate": "2026-04-22T00:00:00", "status": {"status": "Сделка", "price": 7_560_000, "pricePerMeter": 137455, "currentStatusStartDate": "2026-04-29T00:00:00"}},
+                        {"type": "квартира", "area": 39.0, "status": {"status": "В продаже", "price": 4_680_000, "pricePerMeter": 120000, "currentStatusStartDate": "2026-01-28T00:00:00"}},
+                    ]}]}]
+                }
+            raise AssertionError((path, params))
+
+        parser._get_json = fake_get_json  # type: ignore[method-assign]
+        rows = parser.build_monthly_project_history()
+        parser.close()
+
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "month_key": "2026-02",
+                    "snapshot_date": "2026-05-26",
+                    "avg_price_per_sqm": 95000.0,
+                    "apartments_count": 1,
+                },
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "month_key": "2026-04",
+                    "snapshot_date": "2026-05-26",
+                    "avg_price_per_sqm": 118727.5,
+                    "apartments_count": 2,
+                },
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "month_key": "2026-05",
+                    "snapshot_date": "2026-05-26",
+                    "avg_price_per_sqm": 120000.0,
+                    "apartments_count": 2,
+                },
+            ],
+        )
+
     def test_house_keeps_total_apartments_and_commissioning_date(self) -> None:
         parser = ObjectivParser(access_token="test")
         house = parser._house(
@@ -128,6 +192,7 @@ class ObjectivParserTest(unittest.TestCase):
         self.assertIn("Отклонение", problem["label"])
         self.assertEqual(problem["tone"], "negative")
         self.assertIn("Источник: Объектив", normal["tooltip"])
+        self.assertIn("Цель к вводу: 80.0%", normal["tooltip"])
         self.assertIn("Должно быть в сделке к текущей дате", normal["tooltip"])
 
     def test_market_commissioning_status_prefers_actual_date(self) -> None:

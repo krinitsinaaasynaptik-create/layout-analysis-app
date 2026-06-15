@@ -377,6 +377,10 @@ main {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.metrics-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metrics > div,
 .market-kpi,
 .developer-strip-card,
@@ -1057,6 +1061,84 @@ main {
   font-size: 12px;
   line-height: 16px;
   text-align: right;
+}
+
+.panel-head-wrap {
+  flex-wrap: wrap;
+}
+
+.inline-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inline-filter-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.inline-filter-form select {
+  min-width: 220px;
+}
+
+.compact-metrics {
+  margin-top: 0;
+}
+
+.history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.history-chart-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.history-chart {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: 220px;
+}
+
+.history-chart line {
+  stroke: var(--border-soft);
+  stroke-width: 1;
+}
+
+.history-chart path {
+  fill: none;
+  stroke: var(--accent-blue);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-chart circle {
+  fill: var(--surface);
+  stroke: var(--accent-blue);
+  stroke-width: 2;
+}
+
+.history-chart text {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.history-chart .x-label {
+  text-anchor: middle;
 }
 
 .insight-list,
