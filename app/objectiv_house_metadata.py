@@ -7,12 +7,13 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from .models import House
 from .objectiv_parser import ObjectivParser
+from .refresh_catalog import REFRESH_TARGETS
 
 
 OBJECTIV_GROUP_BY_DEVELOPER = {
-    "zhcom": "Железно",
-    "sretensky": "Сретенский посад",
-    "ksm": "КСМ",
+    target.id: target.objectiv_group_name
+    for target in REFRESH_TARGETS
+    if target.objectiv_group_name
 }
 
 MANUAL_OBJECTIV_MAPPING = {
