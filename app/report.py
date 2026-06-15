@@ -52,6 +52,8 @@ def build_report(
     project_id: str | None = None,
     history_project_id: str | None = None,
     history_house_id: str | None = None,
+    history_metric: str = "price",
+    history_axis: str = "date",
     calc_mode: str = "apartments",
     rooms: str | None = None,
     developer_scope: str = "all",
@@ -379,6 +381,8 @@ def build_report(
         selected_project=selected_project,
         history_project_id=history_project_id,
         history_house_id=history_house_id,
+        history_metric=history_metric,
+        history_axis=history_axis,
         project_options=selected_project_options,
         projects=project_list,
         houses=houses,
@@ -428,6 +432,8 @@ def build_report(
             "project_id": selected_project.get("id") if selected_project else "",
             "history_project_id": project_price_history.get("selected_project_id") or "",
             "history_house_id": project_price_history.get("selected_house_id") or "",
+            "history_metric": project_price_history.get("metric") or "price",
+            "history_axis": project_price_history.get("axis") or "date",
             "rooms": rooms or "",
             "developer_options": developers,
             "project_options": selected_project_options,
@@ -932,6 +938,8 @@ def _build_project_price_history(
     selected_project: Dict[str, Any] | None,
     history_project_id: str | None,
     history_house_id: str | None,
+    history_metric: str,
+    history_axis: str,
     project_options: List[Dict[str, Any]],
     projects: List[Dict[str, Any]],
     houses: List[Dict[str, Any]],
@@ -940,14 +948,19 @@ def _build_project_price_history(
     apartment_snapshots: List[Dict[str, Any]],
     flat_meta_by_id: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
+    metric = history_metric if history_metric in {"price", "index"} else "price"
+    axis = history_axis if history_axis in {"date", "delivery"} else "date"
     base = {
         "available": False,
+        "metric": metric,
+        "axis": axis,
         "selected_project_id": "",
         "selected_project_name": "",
         "selected_house_id": "",
         "selected_house_name": "",
         "house_options": [],
         "series": [],
+        "series_groups": [],
         "stats": {
             "sales_start_date": "",
             "latest_snapshot_date": "",
@@ -960,12 +973,14 @@ def _build_project_price_history(
         },
         "chart": {
             "path": "",
+            "paths": [],
             "points": [],
             "x_labels": [],
             "y_ticks": [],
             "width": 760,
             "height": 220,
             "view_box": "0 0 760 220",
+            "unit": "₽/м²",
         },
         "message": "Выберите дом, чтобы посмотреть историю средней цены за м².",
     }
@@ -1024,6 +1039,8 @@ def _build_project_price_history(
             selected_house_name=selected_house_name,
             houses=houses,
             monthly_rows=stored_monthly_rows,
+            metric=metric,
+            axis=axis,
         )
 
     objectiv_snapshots = []
@@ -1050,8 +1067,8 @@ def _build_project_price_history(
     month_snapshots = sorted(latest_by_month.values(), key=lambda item: item["_dt"])
     snapshot_by_id = {snapshot["id"]: snapshot for snapshot in month_snapshots}
 
-    prices_by_month: Dict[str, List[float]] = defaultdict(list)
-    counts_by_month: Dict[str, int] = defaultdict(int)
+    prices_by_segment: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+    counts_by_segment: Dict[Tuple[str, str], int] = defaultdict(int)
     for row in apartment_snapshots:
         if row.get("status") != "in_sale":
             continue
@@ -1068,9 +1085,11 @@ def _build_project_price_history(
         price_per_sqm = row.get("price_per_sqm") or m.price_per_sqm(row.get("price"), row.get("area"))
         if price_per_sqm is None:
             continue
+        room_key = str(flat_meta.get("rooms") or "").strip()
         month_key = snapshot["_dt"].strftime("%Y-%m")
-        prices_by_month[month_key].append(float(price_per_sqm))
-        counts_by_month[month_key] += 1
+        for segment in ("", room_key):
+            prices_by_segment[(month_key, segment)].append(float(price_per_sqm))
+            counts_by_segment[(month_key, segment)] += 1
 
     project_houses = [house for house in houses if house.get("house_id") == selected_history_house_id]
     sales_start = _min_dt(_parse_dt(house.get("sales_start_date")) for house in project_houses)
@@ -1081,39 +1100,40 @@ def _build_project_price_history(
         base["message"] = "Для выбранного дома пока нет истории из Объектива."
         return base
 
-    series = []
-    current_dt = start_dt
-    while current_dt <= end_dt:
-        month_key = current_dt.strftime("%Y-%m")
-        month_prices = prices_by_month.get(month_key, [])
-        avg_value = round(sum(month_prices) / len(month_prices), 2) if month_prices else None
-        month_snapshot = latest_by_month.get(month_key)
-        series.append(
-            {
-                "key": month_key,
-                "label": current_dt.strftime("%m.%Y"),
-                "value": avg_value,
-                "apartments_count": counts_by_month.get(month_key, 0),
-                "snapshot_date": _format_date(month_snapshot.get("_dt")) if month_snapshot else "",
-            }
-        )
-        current_dt = _next_month(current_dt)
+    delivery_dt = _history_delivery_dt(project_houses)
+    month_keys = _month_keys_between(start_dt, end_dt)
+    series_groups = _history_groups_from_segments(
+        month_keys=month_keys,
+        prices_by_segment=prices_by_segment,
+        counts_by_segment=counts_by_segment,
+        snapshot_date_by_month={
+            month_key: _format_date(snapshot.get("_dt"))
+            for month_key, snapshot in latest_by_month.items()
+        },
+        delivery_dt=delivery_dt,
+        metric=metric,
+        axis=axis,
+    )
+    total_group = series_groups[0] if series_groups else {"series": []}
+    series = total_group["series"]
 
+    price_values = [item.get("raw_value", item.get("value")) for item in series if item.get("raw_value", item.get("value")) is not None]
     values = [item["value"] for item in series if item.get("value") is not None]
-    if not values:
+    if not price_values:
         base["message"] = "В истории Объектива по выбранному дому пока нет месячных срезов с ценой."
         base["series"] = series
         base["stats"]["sales_start_date"] = _format_date(sales_start) if sales_start else ""
         base["stats"]["months_total"] = len(series)
         return base
 
-    first_value = next((item["value"] for item in series if item.get("value") is not None), None)
-    current_value = next((item["value"] for item in reversed(series) if item.get("value") is not None), None)
+    first_value = next((item.get("raw_value", item.get("value")) for item in series if item.get("raw_value", item.get("value")) is not None), None)
+    current_value = next((item.get("raw_value", item.get("value")) for item in reversed(series) if item.get("raw_value", item.get("value")) is not None), None)
     change_abs = current_value - first_value if current_value is not None and first_value is not None else None
     change_pct = (change_abs / first_value * 100) if change_abs is not None and first_value else None
 
     base["available"] = True
     base["series"] = series
+    base["series_groups"] = series_groups
     base["selected_house_id"] = selected_history_house_id
     base["selected_house_name"] = selected_house_name
     base["stats"] = {
@@ -1124,9 +1144,9 @@ def _build_project_price_history(
         "change_abs": change_abs,
         "change_pct": change_pct,
         "months_total": len(series),
-        "months_with_values": len(values),
+        "months_with_values": len(price_values),
     }
-    base["chart"] = _build_history_chart(series)
+    base["chart"] = _build_history_chart(series, series_groups=series_groups, metric=metric)
     base["message"] = ""
     return base
 
@@ -1270,6 +1290,7 @@ def _canonicalize_objectiv_history_rows(
                 "project_name": project_ref["name"],
                 "house_id": resolved_house_id,
                 "house_name": resolved_house_name,
+                "rooms": str(row.get("rooms") or ""),
             }
         )
     return items
@@ -1284,14 +1305,30 @@ def _build_project_price_history_from_monthly_rows(
     selected_house_name: str,
     houses: List[Dict[str, Any]],
     monthly_rows: List[Dict[str, Any]],
+    metric: str,
+    axis: str,
 ) -> Dict[str, Any]:
-    by_month = {str(row.get("month_key") or ""): row for row in monthly_rows if row.get("month_key")}
-    month_keys = sorted(by_month)
+    by_segment: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    snapshot_date_by_month: Dict[str, str] = {}
+    for row in monthly_rows:
+        month_key = str(row.get("month_key") or "")
+        if not month_key:
+            continue
+        rooms = str(row.get("rooms") or "")
+        by_segment[(month_key, rooms)] = row
+        snapshot_date = str(row.get("snapshot_date") or "")
+        if snapshot_date:
+            current_date = snapshot_date_by_month.get(month_key)
+            if current_date is None or snapshot_date > current_date:
+                snapshot_date_by_month[month_key] = snapshot_date
+
+    month_keys = sorted({month_key for month_key, _ in by_segment})
     if not month_keys:
         return base
 
     project_houses = [house for house in houses if house.get("house_id") == selected_house_id]
     sales_start = _min_dt(_parse_dt(house.get("sales_start_date")) for house in project_houses)
+    delivery_dt = _history_delivery_dt(project_houses)
     first_month_dt = _parse_month_key(month_keys[0])
     last_month_dt = _parse_month_key(month_keys[-1])
     start_dt = _month_start(sales_start) or first_month_dt
@@ -1299,44 +1336,56 @@ def _build_project_price_history_from_monthly_rows(
     if not start_dt or not end_dt:
         return base
 
-    series = []
-    current_dt = start_dt
-    while current_dt <= end_dt:
-        month_key = current_dt.strftime("%Y-%m")
-        row = by_month.get(month_key)
-        series.append(
-            {
-                "key": month_key,
-                "label": current_dt.strftime("%m.%Y"),
-                "value": row.get("avg_price_per_sqm") if row else None,
-                "apartments_count": int(row.get("apartments_count") or 0) if row else 0,
-                "snapshot_date": _format_date(_parse_dt(row.get("snapshot_date"))) if row and _parse_dt(row.get("snapshot_date")) else "",
-            }
-        )
-        current_dt = _next_month(current_dt)
+    prices_by_segment: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+    counts_by_segment: Dict[Tuple[str, str], int] = defaultdict(int)
+    for (month_key, rooms), row in by_segment.items():
+        value = row.get("avg_price_per_sqm")
+        if value is None:
+            continue
+        prices_by_segment[(month_key, rooms)].append(float(value))
+        counts_by_segment[(month_key, rooms)] += int(row.get("apartments_count") or 0)
 
+    series_groups = _history_groups_from_segments(
+        month_keys=_month_keys_between(start_dt, end_dt),
+        prices_by_segment=prices_by_segment,
+        counts_by_segment=counts_by_segment,
+        snapshot_date_by_month={
+            month_key: _format_date(_parse_dt(snapshot_date)) if _parse_dt(snapshot_date) else ""
+            for month_key, snapshot_date in snapshot_date_by_month.items()
+        },
+        delivery_dt=delivery_dt,
+        metric=metric,
+        axis=axis,
+    )
+    total_group = series_groups[0] if series_groups else {"series": []}
+    series = total_group["series"]
+
+    price_values = [item.get("raw_value", item.get("value")) for item in series if item.get("raw_value", item.get("value")) is not None]
     values = [item["value"] for item in series if item.get("value") is not None]
-    if not values:
+    if not price_values:
         base["series"] = series
         base["stats"]["sales_start_date"] = _format_date(sales_start) if sales_start else ""
         base["stats"]["months_total"] = len(series)
         base["message"] = "В истории Объектива по выбранному дому пока нет месячных срезов с ценой."
         return base
 
-    first_value = next((item["value"] for item in series if item.get("value") is not None), None)
-    current_value = next((item["value"] for item in reversed(series) if item.get("value") is not None), None)
+    first_value = next((item.get("raw_value", item.get("value")) for item in series if item.get("raw_value", item.get("value")) is not None), None)
+    current_value = next((item.get("raw_value", item.get("value")) for item in reversed(series) if item.get("raw_value", item.get("value")) is not None), None)
     change_abs = current_value - first_value if current_value is not None and first_value is not None else None
     change_pct = (change_abs / first_value * 100) if change_abs is not None and first_value else None
-    latest_snapshot_dt = _parse_dt(by_month[month_keys[-1]].get("snapshot_date"))
+    latest_snapshot_dt = _parse_dt(snapshot_date_by_month.get(month_keys[-1]))
 
     return {
         **base,
         "available": True,
+        "metric": metric,
+        "axis": axis,
         "selected_project_id": selected_project_id,
         "selected_project_name": selected_project_name,
         "selected_house_id": selected_house_id,
         "selected_house_name": selected_house_name,
         "series": series,
+        "series_groups": series_groups,
         "stats": {
             "sales_start_date": _format_date(sales_start) if sales_start else "",
             "latest_snapshot_date": _format_date(latest_snapshot_dt) if latest_snapshot_dt else "",
@@ -1345,30 +1394,125 @@ def _build_project_price_history_from_monthly_rows(
             "change_abs": change_abs,
             "change_pct": change_pct,
             "months_total": len(series),
-            "months_with_values": len(values),
+            "months_with_values": len(price_values),
         },
-        "chart": _build_history_chart(series),
+        "chart": _build_history_chart(series, series_groups=series_groups, metric=metric),
         "message": "",
     }
 
 
-def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _history_delivery_dt(houses: List[Dict[str, Any]]) -> datetime | None:
+    actual = _min_dt(_parse_dt(house.get("actual_commissioning_date")) for house in houses)
+    planned = _min_dt(_parse_dt(house.get("commissioning_date")) for house in houses)
+    return _month_start(actual or planned)
+
+
+def _month_keys_between(start_dt: datetime, end_dt: datetime) -> List[str]:
+    keys = []
+    current_dt = start_dt
+    while current_dt <= end_dt:
+        keys.append(current_dt.strftime("%Y-%m"))
+        current_dt = _next_month(current_dt)
+    return keys
+
+
+def _history_groups_from_segments(
+    *,
+    month_keys: List[str],
+    prices_by_segment: Dict[Tuple[str, str], List[float]],
+    counts_by_segment: Dict[Tuple[str, str], int],
+    snapshot_date_by_month: Dict[str, str],
+    delivery_dt: datetime | None,
+    metric: str,
+    axis: str,
+) -> List[Dict[str, Any]]:
+    rooms_keys = sorted(
+        {rooms for _, rooms in prices_by_segment if rooms},
+        key=lambda room: (ROOM_ORDER.get(room, 100), room),
+    )
+    segment_keys = [""] + rooms_keys
+    colors = ["#3f63ff", "#ff8a1f", "#16a34a", "#e11d48", "#7c3aed", "#0891b2", "#ca8a04"]
+    groups: List[Dict[str, Any]] = []
+    for index, rooms in enumerate(segment_keys):
+        raw_values = {
+            month_key: round(sum(values) / len(values), 2)
+            for (month_key, segment), values in prices_by_segment.items()
+            if segment == rooms and values
+        }
+        if not raw_values:
+            continue
+        first_price = next((raw_values[key] for key in month_keys if raw_values.get(key) is not None), None)
+        series = []
+        for month_key in month_keys:
+            dt = _parse_month_key(month_key)
+            price = raw_values.get(month_key)
+            value = round(price / first_price * 100, 2) if metric == "index" and price is not None and first_price else price
+            label = _history_axis_label(dt, delivery_dt, axis) if dt else month_key
+            series.append(
+                {
+                    "key": month_key,
+                    "label": label,
+                    "value": value,
+                    "raw_value": price,
+                    "apartments_count": counts_by_segment.get((month_key, rooms), 0),
+                    "snapshot_date": snapshot_date_by_month.get(month_key, ""),
+                }
+            )
+        values = [item["value"] for item in series if item.get("value") is not None]
+        groups.append(
+            {
+                "key": rooms or "all",
+                "rooms": rooms,
+                "label": "Все" if not rooms else _rooms_label(rooms),
+                "color": colors[index % len(colors)],
+                "series": series,
+                "months_with_values": len(values),
+                "first_value": values[0] if values else None,
+                "current_value": values[-1] if values else None,
+            }
+        )
+    return groups
+
+
+def _history_axis_label(month_dt: datetime, delivery_dt: datetime | None, axis: str) -> str:
+    if axis != "delivery" or not delivery_dt:
+        return month_dt.strftime("%m.%Y")
+    delta = (month_dt.year - delivery_dt.year) * 12 + (month_dt.month - delivery_dt.month)
+    if delta == 0:
+        return "сдача"
+    return f"{delta:+d} мес."
+
+
+def _build_history_chart(
+    series: List[Dict[str, Any]],
+    *,
+    series_groups: List[Dict[str, Any]] | None = None,
+    metric: str = "price",
+) -> Dict[str, Any]:
     width = 1440
     height = 260
     left = 50
     right = 28
     top = 26
     bottom = 42
-    values = [float(item["value"]) for item in series if item.get("value") is not None]
+    chart_groups = series_groups or [{"key": "all", "label": "Все", "color": "#3f63ff", "series": series}]
+    values = [
+        float(item["value"])
+        for group in chart_groups
+        for item in group.get("series", [])
+        if item.get("value") is not None
+    ]
     if not values:
         return {
             "path": "",
+            "paths": [],
             "points": [],
             "x_labels": [],
             "y_ticks": [],
             "width": width,
             "height": height,
             "view_box": f"0 0 {width} {height}",
+            "unit": "индекс" if metric == "index" else "₽/м²",
         }
 
     min_value = min(values)
@@ -1385,23 +1529,37 @@ def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
     usable_width = max(width - left - right, 1)
     usable_height = max(height - top - bottom, 1)
     step = usable_width / max(len(series) - 1, 1)
-    path_parts: List[str] = []
+    paths: List[Dict[str, Any]] = []
     points: List[Dict[str, Any]] = []
-    for index, item in enumerate(series):
-        value = item.get("value")
-        if value is None:
-            continue
-        x = left + (step * index if len(series) > 1 else usable_width / 2)
-        y = top + (max_value - float(value)) / (max_value - min_value) * usable_height
-        point = {
-            "x": round(x, 2),
-            "y": round(y, 2),
-            "value": value,
-            "label": item.get("label") or "",
-            "apartments_count": item.get("apartments_count", 0),
-        }
-        points.append(point)
-        path_parts.append(("M" if not path_parts else "L") + f"{point['x']} {point['y']}")
+    for group in chart_groups:
+        path_parts: List[str] = []
+        group_series = group.get("series", [])
+        for index, item in enumerate(group_series):
+            value = item.get("value")
+            if value is None:
+                continue
+            x = left + (step * index if len(series) > 1 else usable_width / 2)
+            y = top + (max_value - float(value)) / (max_value - min_value) * usable_height
+            point = {
+                "x": round(x, 2),
+                "y": round(y, 2),
+                "value": value,
+                "raw_value": item.get("raw_value", value),
+                "label": item.get("label") or "",
+                "apartments_count": item.get("apartments_count", 0),
+                "series_label": group.get("label") or "",
+                "color": group.get("color") or "#3f63ff",
+            }
+            points.append(point)
+            path_parts.append(("M" if not path_parts else "L") + f"{point['x']} {point['y']}")
+        if path_parts:
+            paths.append(
+                {
+                    "d": " ".join(path_parts),
+                    "label": group.get("label") or "",
+                    "color": group.get("color") or "#3f63ff",
+                }
+            )
 
     tick_values = [min_value + (max_value - min_value) * index / 3 for index in range(4)]
     y_ticks = [
@@ -1423,13 +1581,15 @@ def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
         x_labels.append({"label": item.get("label") or "", "x": round(x, 2)})
 
     return {
-        "path": " ".join(path_parts),
+        "path": paths[0]["d"] if paths else "",
+        "paths": paths,
         "points": points,
         "x_labels": x_labels,
         "y_ticks": y_ticks,
         "width": width,
         "height": height,
         "view_box": f"0 0 {width} {height}",
+        "unit": "индекс" if metric == "index" else "₽/м²",
     }
 
 

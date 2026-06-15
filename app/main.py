@@ -95,6 +95,8 @@ def developer_price_history(request: Request, developer_id: str) -> HTMLResponse
         developer_id=developer_id,
         project_id=_project_id(request),
         history_project_id=_history_project_id(request),
+        history_metric=_history_metric(request),
+        history_axis=_history_axis(request),
         rooms=_rooms(request),
         include_group_metrics=False,
         include_similar_layouts=False,
@@ -114,6 +116,8 @@ def developer_price_history(request: Request, developer_id: str) -> HTMLResponse
             project_id=_project_id(request),
             history_project_id=base_report.get("filters", {}).get("history_project_id") or _history_project_id(request),
             history_house_id=house_id,
+            history_metric=_history_metric(request),
+            history_axis=_history_axis(request),
             rooms=_rooms(request),
             include_group_metrics=False,
             include_similar_layouts=False,
@@ -500,6 +504,16 @@ def _history_house_ids(request: Request) -> list[str]:
         return values
     raw = (request.query_params.get("history_house_ids") or "").strip()
     return [value.strip() for value in raw.split(",") if value.strip()]
+
+
+def _history_metric(request: Request) -> str:
+    value = (request.query_params.get("history_metric") or "price").strip()
+    return value if value in {"price", "index"} else "price"
+
+
+def _history_axis(request: Request) -> str:
+    value = (request.query_params.get("history_axis") or "date").strip()
+    return value if value in {"date", "delivery"} else "date"
 
 
 def _house_id(request: Request) -> Optional[str]:

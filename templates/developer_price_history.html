@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ report.selected_developer.name if report.selected_developer else report.competitor }} — динамика цен</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260615-2">
+  <link rel="stylesheet" href="/static/style.css?v=20260615-3">
 </head>
 <body>
   {% set developer_name = report.selected_developer.name if report.selected_developer else report.competitor %}
@@ -69,6 +69,18 @@
             {% endfor %}
           </select>
         </label>
+        <label>Показатель
+          <select name="history_metric">
+            <option value="price" {% if filters.history_metric == 'price' %}selected{% endif %}>₽/м²</option>
+            <option value="index" {% if filters.history_metric == 'index' %}selected{% endif %}>Индекс от старта</option>
+          </select>
+        </label>
+        <label>Ось X
+          <select name="history_axis">
+            <option value="date" {% if filters.history_axis == 'date' %}selected{% endif %}>По датам</option>
+            <option value="delivery" {% if filters.history_axis == 'delivery' %}selected{% endif %}>До сдачи</option>
+          </select>
+        </label>
         <div class="history-house-picker">
           <span class="history-house-picker-label">Дома</span>
           <details class="history-house-dropdown">
@@ -101,26 +113,33 @@
                   <strong>{{ "{:,.0f}".format(price_history.stats.current_value).replace(",", " ") }} ₽/м²</strong>
                 {% endif %}
               </div>
-              {% if price_history.available %}
+                {% if price_history.available %}
                 <div class="history-card-meta">
                   {% if price_history.stats.sales_start_date %}<span>Старт: {{ price_history.stats.sales_start_date }}</span>{% endif %}
                   {% if price_history.stats.latest_snapshot_date %}<span>Срез: {{ price_history.stats.latest_snapshot_date }}</span>{% endif %}
                   <span>{{ price_history.stats.months_with_values }} мес.</span>
                 </div>
+                {% if price_history.series_groups %}
+                  <div class="history-legend">
+                    {% for group in price_history.series_groups %}
+                      <span><i style="background: {{ group.color }}"></i>{{ group.label }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
                 <div class="history-chart-wrap history-card-chart-wrap">
                   <svg class="history-chart history-card-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="xMidYMid meet" aria-label="График средней цены за квадратный метр">
                     {% for tick in price_history.chart.y_ticks %}
                       <line x1="50" y1="{{ tick.y }}" x2="1412" y2="{{ tick.y }}"></line>
                       <text x="0" y="{{ tick.y + 4 }}">{{ tick.label }}</text>
                     {% endfor %}
-                    {% if price_history.chart.path %}
-                      <path d="{{ price_history.chart.path }}"></path>
-                    {% endif %}
+                    {% for path in price_history.chart.paths %}
+                      <path d="{{ path.d }}" style="stroke: {{ path.color }}"></path>
+                    {% endfor %}
                     {% for point in price_history.chart.points %}
                       <g class="history-chart-point">
-                        <title>{{ point.label }} • {{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
+                        <title>{{ point.series_label }} · {{ point.label }} • {% if filters.history_metric == 'index' %}{{ "{:,.1f}".format(point.value).replace(",", " ") }} инд. / {{ "{:,.0f}".format(point.raw_value).replace(",", " ") }} ₽{% else %}{{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% endif %}{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
                         <circle class="history-chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="9"></circle>
-                        <circle class="history-chart-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+                        <circle class="history-chart-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4" style="stroke: {{ point.color }}"></circle>
                       </g>
                     {% endfor %}
                     {% for label in price_history.chart.x_labels %}

@@ -253,6 +253,7 @@ def _schema_sql(backend: str) -> str:
             project_name TEXT NOT NULL,
             house_id TEXT NOT NULL DEFAULT '',
             house_name TEXT NOT NULL DEFAULT '',
+            rooms TEXT NOT NULL DEFAULT '',
             month_key TEXT NOT NULL,
             snapshot_date TEXT NOT NULL,
             avg_price_per_sqm REAL,
@@ -357,6 +358,7 @@ def _migrate_columns(conn: DBConnection) -> None:
     history_columns = {
         "house_id": "TEXT NOT NULL DEFAULT ''",
         "house_name": "TEXT NOT NULL DEFAULT ''",
+        "rooms": "TEXT NOT NULL DEFAULT ''",
     }
     for name, ddl in history_columns.items():
         if name not in columns["objectiv_project_history_monthly"]:
@@ -731,10 +733,10 @@ def replace_objectiv_project_history_monthly(
         conn.executemany(
             """
             INSERT INTO objectiv_project_history_monthly (
-                developer_id, project_id, project_name, house_id, house_name, month_key, snapshot_date,
+                developer_id, project_id, project_name, house_id, house_name, rooms, month_key, snapshot_date,
                 avg_price_per_sqm, apartments_count, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -743,6 +745,7 @@ def replace_objectiv_project_history_monthly(
                     str(item.get("project_name") or ""),
                     str(item.get("house_id") or ""),
                     str(item.get("house_name") or ""),
+                    str(item.get("rooms") or ""),
                     str(item.get("month_key") or ""),
                     str(item.get("snapshot_date") or ""),
                     item.get("avg_price_per_sqm"),

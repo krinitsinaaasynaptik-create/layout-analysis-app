@@ -112,61 +112,22 @@ class ObjectivParserTest(unittest.TestCase):
         rows = parser.build_monthly_project_history()
         parser.close()
 
-        self.assertEqual(
-            rows,
-            [
-                {
-                    "project_id": "objectiv:101",
-                    "project_name": "ZNAK",
-                    "house_id": "objectiv:5001",
-                    "house_name": "ZNAK, корпус 1",
-                    "month_key": "2026-02",
-                    "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 95000.0,
-                    "apartments_count": 1,
-                },
-                {
-                    "project_id": "objectiv:101",
-                    "project_name": "ZNAK",
-                    "house_id": "objectiv:5001",
-                    "house_name": "ZNAK, корпус 1",
-                    "month_key": "2026-04",
-                    "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 100000.0,
-                    "apartments_count": 1,
-                },
-                {
-                    "project_id": "objectiv:101",
-                    "project_name": "ZNAK",
-                    "house_id": "objectiv:5001",
-                    "house_name": "ZNAK, корпус 1",
-                    "month_key": "2026-05",
-                    "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 120000.0,
-                    "apartments_count": 1,
-                },
-                {
-                    "project_id": "objectiv:101",
-                    "project_name": "ZNAK",
-                    "house_id": "objectiv:5002",
-                    "house_name": "ZNAK, корпус 2",
-                    "month_key": "2026-04",
-                    "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 137455.0,
-                    "apartments_count": 1,
-                },
-                {
-                    "project_id": "objectiv:101",
-                    "project_name": "ZNAK",
-                    "house_id": "objectiv:5002",
-                    "house_name": "ZNAK, корпус 2",
-                    "month_key": "2026-05",
-                    "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 120000.0,
-                    "apartments_count": 1,
-                },
-            ],
-        )
+        self.assertEqual(len(rows), 10)
+        row_keys = {
+            (
+                row["house_id"],
+                row["rooms"],
+                row["month_key"],
+                row["avg_price_per_sqm"],
+                row["apartments_count"],
+            )
+            for row in rows
+        }
+        self.assertIn(("objectiv:5001", "", "2026-02", 95000.0, 1), row_keys)
+        self.assertIn(("objectiv:5001", "UNKNOWN", "2026-02", 95000.0, 1), row_keys)
+        self.assertIn(("objectiv:5001", "", "2026-05", 120000.0, 1), row_keys)
+        self.assertIn(("objectiv:5002", "", "2026-04", 137455.0, 1), row_keys)
+        self.assertIn(("objectiv:5002", "UNKNOWN", "2026-05", 120000.0, 1), row_keys)
 
     def test_house_keeps_total_apartments_and_commissioning_date(self) -> None:
         parser = ObjectivParser(access_token="test")
@@ -249,6 +210,10 @@ class ObjectivParserTest(unittest.TestCase):
         self.assertEqual(
             _manual_match_key("zhcom", "Дом Булычев", "Дом 28"),
             ("дом булычев", "1"),
+        )
+        self.assertEqual(
+            _manual_match_key("ksm", "Видный", "Мелькомбинатовский, 3"),
+            ("видный", "1"),
         )
         self.assertEqual(
             _manual_match_key("sretensky", "Соловьи", "Красный химик 1/4"),

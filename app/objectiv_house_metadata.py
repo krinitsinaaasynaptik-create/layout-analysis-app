@@ -17,6 +17,7 @@ OBJECTIV_GROUP_BY_DEVELOPER = {
 
 MANUAL_OBJECTIV_MAPPING = {
     ("zhcom", "дом булычев", "28"): ("дом булычев", "1"),
+    ("ksm", "видный", "3"): ("видный", "1"),
     ("sretensky", "соловьи", "1.4"): ("соловьи", "1"),
 }
 

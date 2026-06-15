@@ -532,8 +532,10 @@ class ReportDynamicsTest(unittest.TestCase):
                 {"id": 7, "snapshot_id": 4, "apartment_id": "f1", "price": 5_200_000, "price_per_sqm": 130_000, "area": 40.0, "floor": 2, "status": "in_sale", "layout_group_id": "g1"},
             ],
             "objectiv_project_history_monthly": [
-                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "month_key": "2026-02", "snapshot_date": "2026-02-26", "avg_price_per_sqm": 105000.0, "apartments_count": 2},
-                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "month_key": "2026-03", "snapshot_date": "2026-03-25", "avg_price_per_sqm": 125000.0, "apartments_count": 1},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "rooms": "", "month_key": "2026-02", "snapshot_date": "2026-02-26", "avg_price_per_sqm": 105000.0, "apartments_count": 2},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "rooms": "", "month_key": "2026-03", "snapshot_date": "2026-03-25", "avg_price_per_sqm": 125000.0, "apartments_count": 1},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "rooms": "1К", "month_key": "2026-02", "snapshot_date": "2026-02-26", "avg_price_per_sqm": 105000.0, "apartments_count": 2},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "rooms": "1К", "month_key": "2026-03", "snapshot_date": "2026-03-25", "avg_price_per_sqm": 125000.0, "apartments_count": 1},
             ],
             "layout_tags": [],
             "layout_group_tags": [],
@@ -553,6 +555,7 @@ class ReportDynamicsTest(unittest.TestCase):
         self.assertEqual(history["stats"]["first_value"], 105000.0)
         self.assertEqual(history["stats"]["current_value"], 125000.0)
         self.assertEqual(history["stats"]["change_abs"], 20000.0)
+        self.assertEqual([group["label"] for group in history["series_groups"]], ["Все", "1-комн."])
 
     @patch("app.report.latest_run", return_value=None)
     @patch("app.report.fetch_report_rows")
