@@ -1353,12 +1353,12 @@ def _build_project_price_history_from_monthly_rows(
 
 
 def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
-    width = 760
-    height = 204
-    left = 26
-    right = 20
-    top = 14
-    bottom = 30
+    width = 1440
+    height = 260
+    left = 50
+    right = 28
+    top = 26
+    bottom = 42
     values = [float(item["value"]) for item in series if item.get("value") is not None]
     if not values:
         return {

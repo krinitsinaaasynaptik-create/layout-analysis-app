@@ -1155,8 +1155,8 @@ main {
 .history-chart {
   display: block;
   width: 100%;
-  min-width: 720px;
-  height: 260px;
+  min-width: 960px;
+  height: 300px;
 }
 
 .history-chart line {
@@ -1167,15 +1167,17 @@ main {
 .history-chart path {
   fill: none;
   stroke: var(--accent-blue);
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .history-chart-dot {
   fill: var(--surface);
   stroke: var(--accent-blue);
   stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .history-chart-hit {
@@ -1187,12 +1189,12 @@ main {
 
 .history-chart-point:hover .history-chart-dot {
   fill: var(--accent-blue);
-  stroke-width: 3;
+  stroke-width: 2.5;
 }
 
 .history-chart text {
   fill: var(--text-secondary);
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
 }
 
