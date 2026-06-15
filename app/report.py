@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .analytics import metrics as m
 from .config import CITY, COMPETITOR, IMAGE_DIR, OWN_COMPANY, USE_LOCAL_IMAGE_FILES
 from .db import fetch_refresh_targets, fetch_report_rows, latest_run
-from .objectiv_house_metadata import _objective_match_key, _site_match_key
+from .objectiv_house_metadata import _manual_match_key, _objective_match_key, _site_match_key
 from .refresh_catalog import REFRESH_TARGETS
 from .project_canon import canonical_house_ref, canonical_project_ref, canonicalize_project_data
 
@@ -1215,6 +1215,16 @@ def _canonicalize_objectiv_history_rows(
             "house_id": house_ref["key"],
             "house_name": house_ref["name"],
         }
+        manual_match_key = _manual_match_key(
+            developer_id,
+            str(house.get("project_name") or ""),
+            str(house.get("house_name") or ""),
+        )
+        if manual_match_key:
+            canonical_houses_by_match_key[manual_match_key] = {
+                "house_id": house_ref["key"],
+                "house_name": house_ref["name"],
+            }
 
     items: List[Dict[str, Any]] = []
     for row in rows:
@@ -1232,10 +1242,11 @@ def _canonicalize_objectiv_history_rows(
         resolved_house_id = ""
         resolved_house_name = ""
         if house_name or house_id:
+            project_name_for_match = str(row.get("project_name") or project_ref["name"] or "")
             matched_house = canonical_houses_by_match_key.get(
                 _objective_match_key(
                     developer_id,
-                    str(row.get("project_name") or project_ref["name"] or ""),
+                    project_name_for_match,
                     house_name or house_id,
                 )
             )

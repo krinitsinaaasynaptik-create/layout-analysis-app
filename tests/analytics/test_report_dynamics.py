@@ -766,6 +766,108 @@ class ReportDynamicsTest(unittest.TestCase):
         self.assertEqual([row["key"] for row in history["series"]], ["2022-03"])
         self.assertEqual([row["value"] for row in history["series"]], [160650.39])
 
+    @patch("app.report.latest_run", return_value=None)
+    @patch("app.report.fetch_report_rows")
+    def test_project_price_history_matches_manual_objectiv_house_mapping(self, fetch_report_rows_mock, _latest_run_mock) -> None:
+        fetch_report_rows_mock.return_value = {
+            "developers": [
+                {"id": "zhcom", "name": "Железно", "type": "competitor"},
+            ],
+            "projects": [
+                {"id": "bulychev", "developer_id": "zhcom", "name": "Дом Булычев"},
+            ],
+            "houses": [
+                {"house_id": "bulychev:дом-28", "project_id": "bulychev", "project_name": "Дом Булычев", "house_name": "Дом 28", "sales_start_date": "2022-03-01"},
+            ],
+            "flats": [
+                {
+                    "flat_id": "f1",
+                    "developer_id": "zhcom",
+                    "code": "101",
+                    "project_id": "bulychev",
+                    "project_name": "Дом Булычев",
+                    "house_id": "bulychev:дом-28",
+                    "house_name": "Дом 28",
+                    "rooms": "3К",
+                    "area": 80.0,
+                    "floor": 2,
+                    "price": 12_000_000,
+                    "price_per_sqm": 150_000,
+                    "status": "in_sale",
+                    "url": "https://example.test/f1",
+                    "image_url": "https://example.test/f1.png",
+                    "layout_uuid": "f1.png",
+                    "layout_group_id": "g1",
+                },
+            ],
+            "all_flats": [
+                {
+                    "flat_id": "f1",
+                    "developer_id": "zhcom",
+                    "code": "101",
+                    "project_id": "bulychev",
+                    "project_name": "Дом Булычев",
+                    "house_id": "bulychev:дом-28",
+                    "house_name": "Дом 28",
+                    "rooms": "3К",
+                    "area": 80.0,
+                    "floor": 2,
+                    "price": 12_000_000,
+                    "price_per_sqm": 150_000,
+                    "status": "in_sale",
+                    "url": "https://example.test/f1",
+                    "image_url": "https://example.test/f1.png",
+                    "layout_uuid": "f1.png",
+                    "layout_group_id": "g1",
+                },
+            ],
+            "groups": [
+                {
+                    "group_id": "g1",
+                    "developer_id": "zhcom",
+                    "project_id": "bulychev",
+                    "house_id": "bulychev:дом-28",
+                    "rooms": "3К",
+                    "layout_no": 1,
+                    "representative_image_url": "https://example.test/f1.png",
+                    "representative_local_path": None,
+                    "hash": "hash-f1",
+                    "flat_count": 1,
+                    "flat_ids_json": '["f1"]',
+                },
+            ],
+            "snapshots": [],
+            "apartment_snapshots": [],
+            "objectiv_project_history_monthly": [
+                {
+                    "developer_id": "zhcom",
+                    "project_id": "zhcom:дом булычев",
+                    "project_name": "Дом Булычев",
+                    "house_id": "zhcom:дом булычев:дом булычев, корпус 1",
+                    "house_name": "Дом Булычев, корпус 1",
+                    "month_key": "2022-03",
+                    "snapshot_date": "2026-06-14",
+                    "avg_price_per_sqm": 139442.0,
+                    "apartments_count": 4,
+                },
+            ],
+            "layout_tags": [],
+            "layout_group_tags": [],
+            "manual_merges": [],
+        }
+
+        report = build_report(
+            developer_id="zhcom",
+            history_project_id="zhcom:дом булычев",
+            history_house_id="zhcom:дом булычев:дом 28",
+        )
+
+        history = report["project_price_history"]
+        self.assertTrue(history["available"])
+        self.assertEqual(history["selected_house_id"], "zhcom:дом булычев:дом 28")
+        self.assertEqual([row["key"] for row in history["series"]], ["2022-03"])
+        self.assertEqual([row["value"] for row in history["series"]], [139442.0])
+
 
 if __name__ == "__main__":
     unittest.main()
