@@ -192,7 +192,7 @@
                 <span>{{ price_history.selected_project_name }}</span>
               </div>
               <div class="history-chart-wrap">
-              <svg class="history-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="xMidYMid meet" aria-label="График средней цены за квадратный метр">
+              <svg class="history-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="none" aria-label="График средней цены за квадратный метр">
                 {% for tick in price_history.chart.y_ticks %}
                   <line x1="22" y1="{{ tick.y }}" x2="742" y2="{{ tick.y }}"></line>
                   <text x="0" y="{{ tick.y + 4 }}">{{ tick.label }}</text>
