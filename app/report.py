@@ -50,6 +50,7 @@ def build_report(
     developer_id: str | None = None,
     project_id: str | None = None,
     history_project_id: str | None = None,
+    history_house_id: str | None = None,
     calc_mode: str = "apartments",
     rooms: str | None = None,
     developer_scope: str = "all",
@@ -372,6 +373,7 @@ def build_report(
         selected_developer=selected_developer,
         selected_project=selected_project,
         history_project_id=history_project_id,
+        history_house_id=history_house_id,
         project_options=selected_project_options,
         projects=project_list,
         houses=houses,
@@ -420,10 +422,12 @@ def build_report(
             "developer_id": selected_developer.get("id") if selected_developer else "",
             "project_id": selected_project.get("id") if selected_project else "",
             "history_project_id": project_price_history.get("selected_project_id") or "",
+            "history_house_id": project_price_history.get("selected_house_id") or "",
             "rooms": rooms or "",
             "developer_options": developers,
             "project_options": selected_project_options,
             "history_project_options": selected_project_options,
+            "history_house_options": project_price_history.get("house_options") or [],
             "room_options": room_options,
         },
         "latest_run": _latest_run_for_display(),
@@ -922,6 +926,7 @@ def _build_project_price_history(
     selected_developer: Dict[str, Any] | None,
     selected_project: Dict[str, Any] | None,
     history_project_id: str | None,
+    history_house_id: str | None,
     project_options: List[Dict[str, Any]],
     projects: List[Dict[str, Any]],
     houses: List[Dict[str, Any]],
@@ -934,6 +939,9 @@ def _build_project_price_history(
         "available": False,
         "selected_project_id": "",
         "selected_project_name": "",
+        "selected_house_id": "",
+        "selected_house_name": "",
+        "house_options": [],
         "series": [],
         "stats": {
             "sales_start_date": "",
@@ -954,7 +962,7 @@ def _build_project_price_history(
             "height": 220,
             "view_box": "0 0 760 220",
         },
-        "message": "Выберите проект, чтобы посмотреть историю средней цены за м².",
+        "message": "Выберите дом, чтобы посмотреть историю средней цены за м².",
     }
     if not selected_developer:
         return base
@@ -980,17 +988,35 @@ def _build_project_price_history(
     selected_project_name = str(selected_project_option.get("name") or selected_history_project_id)
     base["selected_project_id"] = selected_history_project_id
     base["selected_project_name"] = selected_project_name
+    house_options = _history_house_options(houses, selected_history_project_id)
+    base["house_options"] = house_options
+    if not house_options:
+        base["message"] = "Для выбранного проекта пока нет домов."
+        return base
+    selected_history_house_id = _select_history_house_id(history_house_id, house_options)
+    selected_house_option = next(
+        (item for item in house_options if item.get("id") == selected_history_house_id),
+        house_options[0],
+    )
+    selected_history_house_id = str(selected_house_option.get("id") or "")
+    selected_house_name = str(selected_house_option.get("name") or selected_history_house_id)
+    base["selected_house_id"] = selected_history_house_id
+    base["selected_house_name"] = selected_house_name
 
     stored_monthly_rows = [
         row
         for row in objectiv_project_history_monthly
-        if row.get("developer_id") == developer_id and row.get("project_id") == selected_history_project_id
+        if row.get("developer_id") == developer_id
+        and row.get("project_id") == selected_history_project_id
+        and row.get("house_id") == selected_history_house_id
     ]
     if stored_monthly_rows:
         return _build_project_price_history_from_monthly_rows(
             base=base,
             selected_project_id=selected_history_project_id,
             selected_project_name=selected_project_name,
+            selected_house_id=selected_history_house_id,
+            selected_house_name=selected_house_name,
             houses=houses,
             monthly_rows=stored_monthly_rows,
         )
@@ -1007,7 +1033,7 @@ def _build_project_price_history(
         objectiv_snapshots.append({**snapshot, "_dt": dt})
     objectiv_snapshots = _latest_snapshots_per_day(objectiv_snapshots)
     if not objectiv_snapshots:
-        base["message"] = "Для проекта пока нет истории из Объектива."
+        base["message"] = "Для выбранного дома пока нет истории из Объектива."
         return base
 
     latest_by_month: Dict[str, Dict[str, Any]] = {}
@@ -1032,6 +1058,8 @@ def _build_project_price_history(
             continue
         if flat_meta.get("project_id") != selected_history_project_id:
             continue
+        if flat_meta.get("house_id") != selected_history_house_id:
+            continue
         price_per_sqm = row.get("price_per_sqm") or m.price_per_sqm(row.get("price"), row.get("area"))
         if price_per_sqm is None:
             continue
@@ -1039,13 +1067,13 @@ def _build_project_price_history(
         prices_by_month[month_key].append(float(price_per_sqm))
         counts_by_month[month_key] += 1
 
-    project_houses = [house for house in houses if house.get("project_id") == selected_history_project_id]
+    project_houses = [house for house in houses if house.get("house_id") == selected_history_house_id]
     sales_start = _min_dt(_parse_dt(house.get("sales_start_date")) for house in project_houses)
     first_snapshot_dt = month_snapshots[0]["_dt"] if month_snapshots else None
     start_dt = _month_start(sales_start or first_snapshot_dt)
     end_dt = _month_start(month_snapshots[-1]["_dt"]) if month_snapshots else start_dt
     if not start_dt or not end_dt:
-        base["message"] = "Для проекта пока нет истории из Объектива."
+        base["message"] = "Для выбранного дома пока нет истории из Объектива."
         return base
 
     series = []
@@ -1068,7 +1096,7 @@ def _build_project_price_history(
 
     values = [item["value"] for item in series if item.get("value") is not None]
     if not values:
-        base["message"] = "В истории Объектива по проекту пока нет месячных срезов с ценой."
+        base["message"] = "В истории Объектива по выбранному дому пока нет месячных срезов с ценой."
         base["series"] = series
         base["stats"]["sales_start_date"] = _format_date(sales_start) if sales_start else ""
         base["stats"]["months_total"] = len(series)
@@ -1081,6 +1109,8 @@ def _build_project_price_history(
 
     base["available"] = True
     base["series"] = series
+    base["selected_house_id"] = selected_history_house_id
+    base["selected_house_name"] = selected_house_name
     base["stats"] = {
         "sales_start_date": _format_date(sales_start) if sales_start else "",
         "latest_snapshot_date": _format_date(month_snapshots[-1]["_dt"]) if month_snapshots else "",
@@ -1120,11 +1150,32 @@ def _select_history_project_id(
     return str(project_options[0].get("id") or "")
 
 
+def _history_house_options(houses: List[Dict[str, Any]], project_id: str) -> List[Dict[str, str]]:
+    options: Dict[str, Dict[str, str]] = {}
+    for house in houses:
+        if house.get("project_id") != project_id:
+            continue
+        house_id = str(house.get("house_id") or "")
+        if not house_id:
+            continue
+        options.setdefault(house_id, {"id": house_id, "name": str(house.get("house_name") or house_id)})
+    return sorted(options.values(), key=lambda item: item["name"])
+
+
+def _select_history_house_id(history_house_id: str | None, house_options: List[Dict[str, str]]) -> str:
+    option_ids = {str(item.get("id") or "") for item in house_options}
+    if history_house_id and history_house_id in option_ids:
+        return history_house_id
+    return str(house_options[0].get("id") or "")
+
+
 def _build_project_price_history_from_monthly_rows(
     *,
     base: Dict[str, Any],
     selected_project_id: str,
     selected_project_name: str,
+    selected_house_id: str,
+    selected_house_name: str,
     houses: List[Dict[str, Any]],
     monthly_rows: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
@@ -1133,7 +1184,7 @@ def _build_project_price_history_from_monthly_rows(
     if not month_keys:
         return base
 
-    project_houses = [house for house in houses if house.get("project_id") == selected_project_id]
+    project_houses = [house for house in houses if house.get("house_id") == selected_house_id]
     sales_start = _min_dt(_parse_dt(house.get("sales_start_date")) for house in project_houses)
     first_month_dt = _parse_month_key(month_keys[0])
     last_month_dt = _parse_month_key(month_keys[-1])
@@ -1163,7 +1214,7 @@ def _build_project_price_history_from_monthly_rows(
         base["series"] = series
         base["stats"]["sales_start_date"] = _format_date(sales_start) if sales_start else ""
         base["stats"]["months_total"] = len(series)
-        base["message"] = "В истории Объектива по проекту пока нет месячных срезов с ценой."
+        base["message"] = "В истории Объектива по выбранному дому пока нет месячных срезов с ценой."
         return base
 
     first_value = next((item["value"] for item in series if item.get("value") is not None), None)
@@ -1177,6 +1228,8 @@ def _build_project_price_history_from_monthly_rows(
         "available": True,
         "selected_project_id": selected_project_id,
         "selected_project_name": selected_project_name,
+        "selected_house_id": selected_house_id,
+        "selected_house_name": selected_house_name,
         "series": series,
         "stats": {
             "sales_start_date": _format_date(sales_start) if sales_start else "",

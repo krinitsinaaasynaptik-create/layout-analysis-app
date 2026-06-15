@@ -1074,6 +1074,10 @@ main {
   gap: 8px;
 }
 
+.inline-filter-form-wide {
+  align-items: flex-end;
+}
+
 .inline-filter-form label {
   display: grid;
   gap: 6px;
@@ -1090,6 +1094,36 @@ main {
   margin-top: 0;
 }
 
+.history-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.history-summary-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
+}
+
+.history-summary-card span {
+  display: block;
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.history-summary-card p {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .history-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1101,8 +1135,37 @@ main {
 }
 
 .history-chart-wrap {
-  margin-top: 14px;
+  margin-top: 0;
   overflow-x: auto;
+}
+
+.history-chart-shell {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+}
+
+.history-chart-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.history-chart-caption strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.history-chart-caption span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .history-chart {
@@ -2223,6 +2286,10 @@ body.modal-open {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .history-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .focus-card-grid,
   .developer-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2317,6 +2384,7 @@ body.modal-open {
   .status-band,
   .metrics,
   .metrics-six,
+  .history-summary-grid,
   .dashboard-kpis,
   .filters-panel,
   .refresh-token-panel,

@@ -251,6 +251,8 @@ def _schema_sql(backend: str) -> str:
             developer_id TEXT NOT NULL,
             project_id TEXT NOT NULL,
             project_name TEXT NOT NULL,
+            house_id TEXT NOT NULL DEFAULT '',
+            house_name TEXT NOT NULL DEFAULT '',
             month_key TEXT NOT NULL,
             snapshot_date TEXT NOT NULL,
             avg_price_per_sqm REAL,
@@ -303,7 +305,7 @@ def _table_columns(conn: DBConnection, table: str) -> set[str]:
 
 
 def _migrate_columns(conn: DBConnection) -> None:
-    columns = {table: _table_columns(conn, table) for table in ("developers", "flats", "layout_groups", "houses")}
+    columns = {table: _table_columns(conn, table) for table in ("developers", "flats", "layout_groups", "houses", "objectiv_project_history_monthly")}
     developer_columns = {
         "type": "TEXT NOT NULL DEFAULT 'competitor'",
     }
@@ -352,6 +354,13 @@ def _migrate_columns(conn: DBConnection) -> None:
     for name, ddl in house_columns.items():
         if name not in columns["houses"]:
             conn.execute(f"ALTER TABLE houses ADD COLUMN {name} {ddl}")
+    history_columns = {
+        "house_id": "TEXT NOT NULL DEFAULT ''",
+        "house_name": "TEXT NOT NULL DEFAULT ''",
+    }
+    for name, ddl in history_columns.items():
+        if name not in columns["objectiv_project_history_monthly"]:
+            conn.execute(f"ALTER TABLE objectiv_project_history_monthly ADD COLUMN {name} {ddl}")
 
 
 def _seed_reference_data(conn: DBConnection) -> None:
@@ -722,16 +731,18 @@ def replace_objectiv_project_history_monthly(
         conn.executemany(
             """
             INSERT INTO objectiv_project_history_monthly (
-                developer_id, project_id, project_name, month_key, snapshot_date,
+                developer_id, project_id, project_name, house_id, house_name, month_key, snapshot_date,
                 avg_price_per_sqm, apartments_count, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
                     developer_id,
                     str(item.get("project_id") or ""),
                     str(item.get("project_name") or ""),
+                    str(item.get("house_id") or ""),
+                    str(item.get("house_name") or ""),
                     str(item.get("month_key") or ""),
                     str(item.get("snapshot_date") or ""),
                     item.get("avg_price_per_sqm"),
@@ -839,7 +850,7 @@ def fetch_report_rows() -> Dict[str, List[Any]]:
                 "SELECT * FROM apartment_snapshots ORDER BY created_at, id"
             ).fetchall(),
             "objectiv_project_history_monthly": conn.execute(
-                "SELECT * FROM objectiv_project_history_monthly ORDER BY project_name, month_key"
+                "SELECT * FROM objectiv_project_history_monthly ORDER BY project_name, house_name, month_key"
             ).fetchall(),
             "layout_tags": conn.execute("SELECT * FROM layout_tags ORDER BY name").fetchall(),
             "layout_group_tags": conn.execute(

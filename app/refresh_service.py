@@ -140,6 +140,8 @@ def _build_objectiv_project_history_rows(developer_id: str, access_token: str) -
             {
                 "project_id": ref["key"],
                 "project_name": ref["name"],
+                "house_id": row.get("house_id"),
+                "house_name": row.get("house_name"),
                 "month_key": row.get("month_key"),
                 "snapshot_date": row.get("snapshot_date"),
                 "avg_price_per_sqm": row.get("avg_price_per_sqm"),

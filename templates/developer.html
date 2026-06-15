@@ -128,11 +128,11 @@
         <section class="panel">
           <div class="panel-head panel-head-wrap">
             <div>
-              <h2>Средняя цена за м² по проекту</h2>
-              <span>Помесячно, по срезам Объектива от старта продаж до последней доступной выгрузки</span>
+              <h2>Средняя цена за м² по дому</h2>
+              <span>Проданные и вымытые квартиры раскладываются по месяцу события, текущая экспозиция относится к текущему месяцу</span>
             </div>
             {% if report.filters.history_project_options %}
-              <form class="inline-filter-form" method="get" action="/developers/{{ report.selected_developer.id }}">
+              <form class="inline-filter-form inline-filter-form-wide" method="get" action="/developers/{{ report.selected_developer.id }}">
                 <input type="hidden" name="period_days" value="{{ report.filters.period_days }}">
                 <input type="hidden" name="project_id" value="{{ report.filters.project_id }}">
                 <input type="hidden" name="rooms" value="{{ report.filters.rooms }}">
@@ -143,25 +143,34 @@
                     {% endfor %}
                   </select>
                 </label>
+                {% if report.filters.history_house_options %}
+                  <label>Дом
+                    <select name="history_house_id" onchange="this.form.submit()">
+                      {% for house in report.filters.history_house_options %}
+                        <option value="{{ house.id }}" {% if report.filters.history_house_id == house.id %}selected{% endif %}>{{ house.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                {% endif %}
               </form>
             {% endif %}
           </div>
 
           {% if price_history.available %}
-            <div class="metrics metrics-four compact-metrics">
-              <div>
+            <div class="history-summary-grid">
+              <div class="history-summary-card">
                 <span>{% if price_history.stats.first_value is not none %}{{ "{:,.0f}".format(price_history.stats.first_value).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
                 <p>первый доступный месяц</p>
               </div>
-              <div>
+              <div class="history-summary-card">
                 <span>{% if price_history.stats.current_value is not none %}{{ "{:,.0f}".format(price_history.stats.current_value).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
                 <p>текущий месяц</p>
               </div>
-              <div>
+              <div class="history-summary-card">
                 <span>{% if price_history.stats.change_abs is not none %}{{ "{:+,.0f}".format(price_history.stats.change_abs).replace(",", " ") }} ₽{% else %}н/д{% endif %}</span>
                 <p>изменение за период</p>
               </div>
-              <div>
+              <div class="history-summary-card">
                 <span>{% if price_history.stats.change_pct is not none %}{{ "{:+.1f}".format(price_history.stats.change_pct).replace(".", ",") }}%{% else %}н/д{% endif %}</span>
                 <p>{{ price_history.stats.months_with_values }} мес. с данными</p>
               </div>
@@ -171,9 +180,15 @@
               {% if price_history.stats.sales_start_date %}<span>Старт продаж: {{ price_history.stats.sales_start_date }}</span>{% endif %}
               {% if price_history.stats.latest_snapshot_date %}<span>Последний срез: {{ price_history.stats.latest_snapshot_date }}</span>{% endif %}
               <span>Проект: {{ price_history.selected_project_name }}</span>
+              <span>Дом: {{ price_history.selected_house_name }}</span>
             </div>
 
-            <div class="history-chart-wrap">
+            <div class="history-chart-shell">
+              <div class="history-chart-caption">
+                <strong>{{ price_history.selected_house_name }}</strong>
+                <span>{{ price_history.selected_project_name }}</span>
+              </div>
+              <div class="history-chart-wrap">
               <svg class="history-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="none" aria-label="График средней цены за квадратный метр">
                 {% for tick in price_history.chart.y_ticks %}
                   <line x1="22" y1="{{ tick.y }}" x2="742" y2="{{ tick.y }}"></line>
@@ -189,6 +204,7 @@
                   <text class="x-label" x="{{ label.x }}" y="212">{{ label.label }}</text>
                 {% endfor %}
               </svg>
+              </div>
             </div>
           {% else %}
             <p class="muted">{{ price_history.message }}</p>

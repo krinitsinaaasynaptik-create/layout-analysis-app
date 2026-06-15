@@ -532,20 +532,22 @@ class ReportDynamicsTest(unittest.TestCase):
                 {"id": 7, "snapshot_id": 4, "apartment_id": "f1", "price": 5_200_000, "price_per_sqm": 130_000, "area": 40.0, "floor": 2, "status": "in_sale", "layout_group_id": "g1"},
             ],
             "objectiv_project_history_monthly": [
-                {"developer_id": "zhcom", "project_id": "zhcom:знак", "project_name": "ЖК ZNAK", "month_key": "2026-02", "snapshot_date": "2026-02-26", "avg_price_per_sqm": 105000.0, "apartments_count": 2},
-                {"developer_id": "zhcom", "project_id": "zhcom:знак", "project_name": "ЖК ZNAK", "month_key": "2026-03", "snapshot_date": "2026-03-25", "avg_price_per_sqm": 125000.0, "apartments_count": 1},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "month_key": "2026-02", "snapshot_date": "2026-02-26", "avg_price_per_sqm": 105000.0, "apartments_count": 2},
+                {"developer_id": "zhcom", "project_id": "zhcom:znak", "project_name": "ЖК ZNAK", "house_id": "zhcom:znak:дом 1", "house_name": "Дом 1", "month_key": "2026-03", "snapshot_date": "2026-03-25", "avg_price_per_sqm": 125000.0, "apartments_count": 1},
             ],
             "layout_tags": [],
             "layout_group_tags": [],
             "manual_merges": [],
         }
 
-        report = build_report(developer_id="zhcom", history_project_id="zhcom:znak")
+        report = build_report(developer_id="zhcom", history_project_id="zhcom:znak", history_house_id="zhcom:znak:дом 1")
 
         history = report["project_price_history"]
         self.assertTrue(history["available"])
         self.assertEqual(report["filters"]["history_project_id"], "zhcom:znak")
+        self.assertEqual(report["filters"]["history_house_id"], "zhcom:znak:дом 1")
         self.assertEqual(history["selected_project_name"], "ZNAK")
+        self.assertEqual(history["selected_house_name"], "Дом 1")
         self.assertEqual([row["key"] for row in history["series"]], ["2026-01", "2026-02", "2026-03"])
         self.assertEqual([row["value"] for row in history["series"]], [None, 105000.0, 125000.0])
         self.assertEqual(history["stats"]["first_value"], 105000.0)

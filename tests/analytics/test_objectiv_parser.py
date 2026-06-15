@@ -85,6 +85,10 @@ class ObjectivParserTest(unittest.TestCase):
                 return {"projects": [{"id": 101}]}
             if path == "/api/ProjectCards/GetProjectInfo":
                 return {"id": 101, "name": "ZNAK", "okses": [{"id": 5001}, {"id": 5002}]}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5001}:
+                return {"id": 5001, "name": "1", "salesStartDate": "2026-01-15T00:00:00"}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5002}:
+                return {"id": 5002, "name": "2", "salesStartDate": "2026-01-15T00:00:00"}
             if path == "/api/ProjectCards/getGridIntervals":
                 return {"years": [{"value": 2026, "months": [{"value": 5, "days": [13, 26]}]}]}
             if path == "/api/ProjectCards/GetOksGrid" and params == {"oksId": 5001, "onDate": "2026-05-26"}:
@@ -114,6 +118,8 @@ class ObjectivParserTest(unittest.TestCase):
                 {
                     "project_id": "objectiv:101",
                     "project_name": "ZNAK",
+                    "house_id": "objectiv:5001",
+                    "house_name": "ZNAK, корпус 1",
                     "month_key": "2026-02",
                     "snapshot_date": "2026-05-26",
                     "avg_price_per_sqm": 95000.0,
@@ -122,18 +128,42 @@ class ObjectivParserTest(unittest.TestCase):
                 {
                     "project_id": "objectiv:101",
                     "project_name": "ZNAK",
+                    "house_id": "objectiv:5001",
+                    "house_name": "ZNAK, корпус 1",
                     "month_key": "2026-04",
                     "snapshot_date": "2026-05-26",
-                    "avg_price_per_sqm": 118727.5,
-                    "apartments_count": 2,
+                    "avg_price_per_sqm": 100000.0,
+                    "apartments_count": 1,
                 },
                 {
                     "project_id": "objectiv:101",
                     "project_name": "ZNAK",
+                    "house_id": "objectiv:5001",
+                    "house_name": "ZNAK, корпус 1",
                     "month_key": "2026-05",
                     "snapshot_date": "2026-05-26",
                     "avg_price_per_sqm": 120000.0,
-                    "apartments_count": 2,
+                    "apartments_count": 1,
+                },
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "house_id": "objectiv:5002",
+                    "house_name": "ZNAK, корпус 2",
+                    "month_key": "2026-04",
+                    "snapshot_date": "2026-05-26",
+                    "avg_price_per_sqm": 137455.0,
+                    "apartments_count": 1,
+                },
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "house_id": "objectiv:5002",
+                    "house_name": "ZNAK, корпус 2",
+                    "month_key": "2026-05",
+                    "snapshot_date": "2026-05-26",
+                    "avg_price_per_sqm": 120000.0,
+                    "apartments_count": 1,
                 },
             ],
         )

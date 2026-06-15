@@ -80,11 +80,13 @@ class ObjectivParser:
 
         for item in projects:
             project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
-            prices_by_month: Dict[str, List[float]] = defaultdict(list)
-            counts_by_month: Dict[str, int] = defaultdict(int)
-            snapshot_date_by_month: Dict[str, str] = {}
             for oks in project.get("okses") or []:
                 oks_id = int(oks["id"])
+                oks_info = self._get_json("/api/ProjectCards/GetOksInfo", params={"oksId": oks_id})
+                house = self._house(project, oks_info)
+                prices_by_month: Dict[str, List[float]] = defaultdict(list)
+                counts_by_month: Dict[str, int] = defaultdict(int)
+                snapshot_date_by_month: Dict[str, str] = {}
                 on_date = self._latest_grid_date(oks_id)
                 grid = self._get_json("/api/ProjectCards/GetOksGrid", params={"oksId": oks_id, "onDate": on_date})
                 lots = self._grid_lots(grid)
@@ -94,22 +96,24 @@ class ObjectivParser:
                     current_date = snapshot_date_by_month.get(month_key)
                     if current_date is None or on_date > current_date:
                         snapshot_date_by_month[month_key] = on_date
-            for month_key in sorted(prices_by_month):
-                prices = prices_by_month[month_key]
-                if not prices:
-                    continue
-                project_rows.append(
-                    {
-                        "project_id": f"objectiv:{project['id']}",
-                        "project_name": str(project.get("name") or project.get("projectName") or project["id"]),
-                        "month_key": month_key,
-                        "snapshot_date": snapshot_date_by_month.get(month_key, ""),
-                        "avg_price_per_sqm": round(sum(prices) / len(prices), 2),
-                        "apartments_count": counts_by_month.get(month_key, 0),
-                    }
-                )
+                for month_key in sorted(prices_by_month):
+                    prices = prices_by_month[month_key]
+                    if not prices:
+                        continue
+                    project_rows.append(
+                        {
+                            "project_id": house.project_id,
+                            "project_name": house.project_name,
+                            "house_id": house.house_id,
+                            "house_name": house.house_name,
+                            "month_key": month_key,
+                            "snapshot_date": snapshot_date_by_month.get(month_key, ""),
+                            "avg_price_per_sqm": round(sum(prices) / len(prices), 2),
+                            "apartments_count": counts_by_month.get(month_key, 0),
+                        }
+                    )
 
-        return sorted(project_rows, key=lambda item: (str(item.get("project_name") or ""), str(item.get("month_key") or "")))
+        return sorted(project_rows, key=lambda item: (str(item.get("project_name") or ""), str(item.get("house_name") or ""), str(item.get("month_key") or "")))
 
     def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         response = self.client.get(urljoin(self.base_url, path), params=params)
