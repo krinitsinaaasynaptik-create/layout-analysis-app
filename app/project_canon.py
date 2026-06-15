@@ -8,8 +8,15 @@ PROJECT_NAME_ALIASES = {
     "zhcom": {
         "знак": "ЖК ZNAK",
         "зарядное": "ЖК Зарядное",
+        "булычев": "Дом Булычев",
         "дом булычев": "Дом Булычев",
         "инноград": "Инноград",
+    },
+}
+
+PROJECT_KEY_ALIASES = {
+    "zhcom": {
+        "булычев": "дом булычев",
     },
 }
 
@@ -24,12 +31,20 @@ HOUSE_ID_ALIASES = {
 def canonical_project_ref(developer_id: Any, project_id: Any, project_name: Any) -> Dict[str, str]:
     raw_name = str(project_name or "").strip()
     normalized = normalize_project_name(raw_name)
-    canonical_name = PROJECT_NAME_ALIASES.get(str(developer_id or ""), {}).get(
+    developer_key = str(developer_id or "")
+    canonical_key = PROJECT_KEY_ALIASES.get(developer_key, {}).get(
         normalized,
-        raw_name or str(project_id or "Без проекта"),
+        normalized or str(project_id or ""),
+    )
+    canonical_name = PROJECT_NAME_ALIASES.get(developer_key, {}).get(
+        canonical_key,
+        PROJECT_NAME_ALIASES.get(developer_key, {}).get(
+            normalized,
+            raw_name or str(project_id or "Без проекта"),
+        ),
     )
     return {
-        "key": f"{developer_id}:{normalized or (project_id or '')}",
+        "key": f"{developer_id}:{canonical_key}",
         "name": canonical_name.strip() or str(project_id or "Без проекта"),
     }
 

@@ -7,6 +7,8 @@ class ProjectCanonTest(unittest.TestCase):
     def test_canonical_project_ref_normalizes_aliases(self) -> None:
         self.assertEqual(canonical_project_ref("zhcom", "1", "ЗНАК")["key"], "zhcom:знак")
         self.assertEqual(canonical_project_ref("zhcom", "2", "ЖК ZNAK")["name"], "ЖК ZNAK")
+        self.assertEqual(canonical_project_ref("zhcom", "3", "Булычев")["key"], "zhcom:дом булычев")
+        self.assertEqual(canonical_project_ref("zhcom", "3", "Булычев")["name"], "Дом Булычев")
         self.assertEqual(canonical_project_ref("kssk", "3", "Скандинавия")["key"], "kssk:скандинавия")
 
     def test_canonicalize_project_data_merges_duplicate_projects(self) -> None:
