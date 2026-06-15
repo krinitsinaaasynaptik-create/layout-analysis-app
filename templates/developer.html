@@ -201,9 +201,11 @@
                   <path d="{{ price_history.chart.path }}"></path>
                 {% endif %}
                 {% for point in price_history.chart.points %}
-                  <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4">
+                  <g class="history-chart-point">
                     <title>{{ point.label }} • {{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
-                  </circle>
+                    <circle class="history-chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="9"></circle>
+                    <circle class="history-chart-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+                  </g>
                 {% endfor %}
                 {% for label in price_history.chart.x_labels %}
                   <text class="x-label" x="{{ label.x }}" y="196">{{ label.label }}</text>

@@ -1119,8 +1119,8 @@ main {
 
 .history-chart-wrap {
   margin-top: 0;
-  max-width: 1280px;
-  margin-left: auto;
+  max-width: 1040px;
+  margin-left: 0;
   margin-right: auto;
   overflow-x: auto;
 }
@@ -1156,9 +1156,10 @@ main {
 
 .history-chart {
   display: block;
-  width: 100%;
+  width: 1040px;
+  max-width: 100%;
   min-width: 720px;
-  height: 260px;
+  height: auto;
 }
 
 .history-chart line {
@@ -1174,10 +1175,22 @@ main {
   stroke-linejoin: round;
 }
 
-.history-chart circle {
+.history-chart-dot {
   fill: var(--surface);
   stroke: var(--accent-blue);
   stroke-width: 2;
+}
+
+.history-chart-hit {
+  fill: transparent;
+  stroke: transparent;
+  cursor: help;
+  pointer-events: all;
+}
+
+.history-chart-point:hover .history-chart-dot {
+  fill: var(--accent-blue);
+  stroke-width: 3;
 }
 
 .history-chart text {
