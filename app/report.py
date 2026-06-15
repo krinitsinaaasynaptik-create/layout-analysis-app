@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .analytics import metrics as m
 from .config import CITY, COMPETITOR, IMAGE_DIR, OWN_COMPANY, USE_LOCAL_IMAGE_FILES
 from .db import fetch_refresh_targets, fetch_report_rows, latest_run
+from .objectiv_house_metadata import _objective_match_key, _site_match_key
 from .refresh_catalog import REFRESH_TARGETS
 from .project_canon import canonical_house_ref, canonical_project_ref, canonicalize_project_data
 
@@ -1187,6 +1188,7 @@ def _canonicalize_objectiv_history_rows(
         for project in raw_project_meta
     }
     canonical_houses_by_project: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+    canonical_houses_by_match_key: Dict[tuple[str, str], Dict[str, str]] = {}
     for house in raw_houses:
         developer_id = str(
             house.get("developer_id")
@@ -1209,6 +1211,10 @@ def _canonicalize_objectiv_history_rows(
                 "house_name": house_ref["name"],
             }
         )
+        canonical_houses_by_match_key[_site_match_key(developer_id, str(house.get("project_name") or ""), str(house.get("house_name") or ""))] = {
+            "house_id": house_ref["key"],
+            "house_name": house_ref["name"],
+        }
 
     items: List[Dict[str, Any]] = []
     for row in rows:
@@ -1226,9 +1232,20 @@ def _canonicalize_objectiv_history_rows(
         resolved_house_id = ""
         resolved_house_name = ""
         if house_name or house_id:
-            house_ref = canonical_house_ref(developer_id, project_ref["key"], house_id, house_name)
-            resolved_house_id = house_ref["key"]
-            resolved_house_name = house_ref["name"]
+            matched_house = canonical_houses_by_match_key.get(
+                _objective_match_key(
+                    developer_id,
+                    str(row.get("project_name") or project_ref["name"] or ""),
+                    house_name or house_id,
+                )
+            )
+            if matched_house:
+                resolved_house_id = matched_house["house_id"]
+                resolved_house_name = matched_house["house_name"]
+            else:
+                house_ref = canonical_house_ref(developer_id, project_ref["key"], house_id, house_name)
+                resolved_house_id = house_ref["key"]
+                resolved_house_name = house_ref["name"]
         else:
             project_houses = canonical_houses_by_project.get(project_ref["key"], [])
             if len(project_houses) == 1:
