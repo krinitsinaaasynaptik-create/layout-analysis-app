@@ -1229,16 +1229,39 @@ main {
   font-weight: 600;
 }
 
-.history-legend span {
+.history-legend-tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.history-legend-tag:hover {
+  border-color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+.history-legend-tag.is-muted {
+  opacity: 0.38;
+  background: var(--surface-muted);
 }
 
 .history-legend i {
   width: 8px;
   height: 8px;
   border-radius: 99px;
+}
+
+.history-chart path.is-hidden,
+.history-chart-point.is-hidden {
+  display: none;
 }
 
 .compact-metrics {

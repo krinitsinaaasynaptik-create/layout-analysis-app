@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ report.selected_developer.name if report.selected_developer else report.competitor }} — динамика цен</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260615-3">
+  <link rel="stylesheet" href="/static/style.css?v=20260615-4">
 </head>
 <body>
   {% set developer_name = report.selected_developer.name if report.selected_developer else report.competitor %}
@@ -122,7 +122,9 @@
                 {% if price_history.series_groups %}
                   <div class="history-legend">
                     {% for group in price_history.series_groups %}
-                      <span><i style="background: {{ group.color }}"></i>{{ group.label }}</span>
+                      <button class="history-legend-tag" type="button" data-series-key="{{ group.key }}" aria-pressed="true">
+                        <i style="background: {{ group.color }}"></i>{{ group.label }}
+                      </button>
                     {% endfor %}
                   </div>
                 {% endif %}
@@ -133,10 +135,10 @@
                       <text x="0" y="{{ tick.y + 4 }}">{{ tick.label }}</text>
                     {% endfor %}
                     {% for path in price_history.chart.paths %}
-                      <path d="{{ path.d }}" style="stroke: {{ path.color }}"></path>
+                      <path d="{{ path.d }}" style="stroke: {{ path.color }}" data-series-key="{{ path.key }}"></path>
                     {% endfor %}
                     {% for point in price_history.chart.points %}
-                      <g class="history-chart-point">
+                      <g class="history-chart-point" data-series-key="{{ point.series_key }}">
                         <title>{{ point.series_label }} · {{ point.label }} • {% if filters.history_metric == 'index' %}{{ "{:,.1f}".format(point.value).replace(",", " ") }} инд. / {{ "{:,.0f}".format(point.raw_value).replace(",", " ") }} ₽{% else %}{{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% endif %}{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
                         <circle class="history-chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="9"></circle>
                         <circle class="history-chart-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4" style="stroke: {{ point.color }}"></circle>
@@ -166,6 +168,23 @@
       toast.textContent = message;
       toast.hidden = false;
     }
+
+    document.querySelectorAll('.history-card').forEach((card) => {
+      const tags = Array.from(card.querySelectorAll('.history-legend-tag'));
+      tags.forEach((tag) => {
+        tag.addEventListener('click', () => {
+          const seriesKey = tag.dataset.seriesKey;
+          const nextHidden = tag.getAttribute('aria-pressed') === 'true';
+          tag.setAttribute('aria-pressed', nextHidden ? 'false' : 'true');
+          tag.classList.toggle('is-muted', nextHidden);
+          card.querySelectorAll('[data-series-key]').forEach((item) => {
+            if (item === tag) return;
+            if (item.dataset.seriesKey !== seriesKey) return;
+            item.classList.toggle('is-hidden', nextHidden);
+          });
+        });
+      });
+    });
   </script>
   {% include "_refresh_script.html" %}
 </body>

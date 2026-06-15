@@ -1547,6 +1547,7 @@ def _build_history_chart(
                 "raw_value": item.get("raw_value", value),
                 "label": item.get("label") or "",
                 "apartments_count": item.get("apartments_count", 0),
+                "series_key": group.get("key") or "",
                 "series_label": group.get("label") or "",
                 "color": group.get("color") or "#3f63ff",
             }
@@ -1556,6 +1557,7 @@ def _build_history_chart(
             paths.append(
                 {
                     "d": " ".join(path_parts),
+                    "key": group.get("key") or "",
                     "label": group.get("label") or "",
                     "color": group.get("color") or "#3f63ff",
                 }
