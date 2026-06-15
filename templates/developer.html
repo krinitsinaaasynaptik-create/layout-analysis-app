@@ -131,30 +131,33 @@
               <h2>Средняя цена за м² по дому</h2>
               <span>Проданные и вымытые квартиры раскладываются по месяцу события, текущая экспозиция относится к текущему месяцу</span>
             </div>
-            {% if report.filters.history_project_options %}
-              <form class="inline-filter-form inline-filter-form-wide" method="get" action="/developers/{{ report.selected_developer.id }}">
-                <input type="hidden" name="period_days" value="{{ report.filters.period_days }}">
-                <input type="hidden" name="project_id" value="{{ report.filters.project_id }}">
-                <input type="hidden" name="rooms" value="{{ report.filters.rooms }}">
-                <label>Проект
-                  <select name="history_project_id" onchange="this.form.submit()">
-                    {% for project in report.filters.history_project_options %}
-                      <option value="{{ project.id }}" {% if report.filters.history_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          </div>
+          {% if report.filters.history_project_options %}
+            <form class="filters-panel filters-panel-compact history-filters" method="get" action="/developers/{{ report.selected_developer.id }}">
+              <input type="hidden" name="period_days" value="{{ report.filters.period_days }}">
+              <input type="hidden" name="project_id" value="{{ report.filters.project_id }}">
+              <input type="hidden" name="rooms" value="{{ report.filters.rooms }}">
+              <label>Проект
+                <select name="history_project_id" onchange="this.form.submit()">
+                  {% for project in report.filters.history_project_options %}
+                    <option value="{{ project.id }}" {% if report.filters.history_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              {% if report.filters.history_house_options %}
+                <label>Дом
+                  <select name="history_house_id" onchange="this.form.submit()">
+                    {% for house in report.filters.history_house_options %}
+                      <option value="{{ house.id }}" {% if report.filters.history_house_id == house.id %}selected{% endif %}>{{ house.name }}</option>
                     {% endfor %}
                   </select>
                 </label>
-                {% if report.filters.history_house_options %}
-                  <label>Дом
-                    <select name="history_house_id" onchange="this.form.submit()">
-                      {% for house in report.filters.history_house_options %}
-                        <option value="{{ house.id }}" {% if report.filters.history_house_id == house.id %}selected{% endif %}>{{ house.name }}</option>
-                      {% endfor %}
-                    </select>
-                  </label>
-                {% endif %}
-              </form>
-            {% endif %}
-          </div>
+              {% endif %}
+              <div class="filter-actions">
+                <button class="button ghost" type="submit">Применить</button>
+              </div>
+            </form>
+          {% endif %}
 
           {% if price_history.available %}
             <div class="history-summary-grid">

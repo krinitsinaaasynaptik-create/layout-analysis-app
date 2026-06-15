@@ -11,6 +11,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.refresh_catalog import REFRESH_TARGETS
+from app.db import init_db
 from app.refresh_service import run_refresh
 
 
@@ -24,6 +25,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    init_db()
     args = parse_args()
     if args.developer_id and args.developer_id not in {target.id for target in REFRESH_TARGETS}:
         print(f"Неизвестный developer_id: {args.developer_id}", file=sys.stderr)

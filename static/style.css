@@ -1067,27 +1067,10 @@ main {
   flex-wrap: wrap;
 }
 
-.inline-filter-form {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.inline-filter-form-wide {
-  align-items: flex-end;
-}
-
-.inline-filter-form label {
-  display: grid;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.inline-filter-form select {
-  min-width: 220px;
+.history-filters {
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+  margin-top: 0;
+  margin-bottom: 14px;
 }
 
 .compact-metrics {

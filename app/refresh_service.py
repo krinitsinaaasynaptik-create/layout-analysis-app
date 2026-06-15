@@ -11,7 +11,7 @@ from .kssk_parser import KsskParser
 from .objectiv_house_metadata import enrich_houses_with_objectiv_metadata
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
-from .project_canon import canonical_project_ref
+from .project_canon import canonical_house_ref, canonical_project_ref
 from .refresh_catalog import REFRESH_TARGET_BY_ID, REFRESH_TARGETS
 from .report import build_report
 from .sretensky_parser import SretenskyParser
@@ -136,12 +136,18 @@ def _build_objectiv_project_history_rows(developer_id: str, access_token: str) -
     result: list[dict[str, Any]] = []
     for row in monthly_rows:
         ref = canonical_project_ref(developer_id, row.get("project_id"), row.get("project_name"))
+        house_ref = canonical_house_ref(
+            developer_id,
+            ref["key"],
+            row.get("house_id"),
+            row.get("house_name"),
+        )
         result.append(
             {
                 "project_id": ref["key"],
                 "project_name": ref["name"],
-                "house_id": row.get("house_id"),
-                "house_name": row.get("house_name"),
+                "house_id": house_ref["key"],
+                "house_name": house_ref["name"],
                 "month_key": row.get("month_key"),
                 "snapshot_date": row.get("snapshot_date"),
                 "avg_price_per_sqm": row.get("avg_price_per_sqm"),
