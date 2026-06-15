@@ -14,6 +14,7 @@ from .config import BASE_DIR, IMAGE_DIR, ensure_dirs
 from .db import (
     create_manual_merge,
     delete_manual_merge,
+    fetch_report_rows,
     fetch_manual_merges,
     init_db,
     update_layout_tags,
@@ -260,6 +261,52 @@ async def refresh_developer(developer_id: str, request: Request) -> JSONResponse
 @app.get("/api/report")
 def report() -> JSONResponse:
     return JSONResponse(build_report(developer_scope="competitors"))
+
+
+@app.get("/api/debug/objectiv-history/{developer_id}")
+def debug_objectiv_history(
+    developer_id: str,
+    history_project_id: str = "",
+    history_house_id: str = "",
+) -> JSONResponse:
+    rows = fetch_report_rows()
+    history_rows = [dict(row) for row in rows.get("objectiv_project_history_monthly", [])]
+    developer_rows = [row for row in history_rows if str(row.get("developer_id") or "") == developer_id]
+    project_rows = [
+        row for row in developer_rows
+        if not history_project_id or str(row.get("project_id") or "") == history_project_id
+    ]
+    house_rows = [
+        row for row in project_rows
+        if not history_house_id or str(row.get("house_id") or "") == history_house_id
+    ]
+    report_data = build_report(
+        developer_id=developer_id,
+        history_project_id=history_project_id or None,
+        history_house_id=history_house_id or None,
+        include_group_metrics=False,
+        include_similar_layouts=False,
+    )
+    project_price_history = report_data.get("project_price_history") or {}
+    return JSONResponse(
+        {
+            "developer_id": developer_id,
+            "history_project_id": history_project_id,
+            "history_house_id": history_house_id,
+            "history_rows_total": len(history_rows),
+            "developer_rows_total": len(developer_rows),
+            "project_rows_total": len(project_rows),
+            "house_rows_total": len(house_rows),
+            "project_rows_sample": project_rows[:10],
+            "house_rows_sample": house_rows[:10],
+            "selected_project_id": project_price_history.get("selected_project_id"),
+            "selected_house_id": project_price_history.get("selected_house_id"),
+            "available": project_price_history.get("available"),
+            "message": project_price_history.get("message"),
+            "series_len": len(project_price_history.get("series") or []),
+            "series_sample": (project_price_history.get("series") or [])[:10],
+        }
+    )
 
 
 @app.get("/api/manual-merges")
