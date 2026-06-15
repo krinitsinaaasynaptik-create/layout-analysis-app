@@ -1119,6 +1119,9 @@ main {
 
 .history-chart-wrap {
   margin-top: 0;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
   overflow-x: auto;
 }
 
@@ -1154,9 +1157,8 @@ main {
 .history-chart {
   display: block;
   width: 100%;
-  min-width: 680px;
-  aspect-ratio: 760 / 204;
-  height: auto;
+  min-width: 720px;
+  height: 260px;
 }
 
 .history-chart line {
@@ -1186,6 +1188,10 @@ main {
 
 .history-chart .x-label {
   text-anchor: middle;
+}
+
+.history-chart .x-label:first-of-type {
+  text-anchor: start;
 }
 
 .insight-list,

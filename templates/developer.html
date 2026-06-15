@@ -201,10 +201,12 @@
                   <path d="{{ price_history.chart.path }}"></path>
                 {% endif %}
                 {% for point in price_history.chart.points %}
-                  <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+                  <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4">
+                    <title>{{ point.label }} • {{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
+                  </circle>
                 {% endfor %}
                 {% for label in price_history.chart.x_labels %}
-                  <text class="x-label" x="{{ label.x }}" y="212">{{ label.label }}</text>
+                  <text class="x-label" x="{{ label.x }}" y="196">{{ label.label }}</text>
                 {% endfor %}
               </svg>
               </div>
