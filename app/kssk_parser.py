@@ -40,7 +40,10 @@ class KsskParser:
         houses_by_id: Dict[str, House] = {}
 
         for project_url, project_name in project_cards:
-            project_flats = self._parse_project(project_url, project_name)
+            try:
+                project_flats = self._parse_project(project_url, project_name)
+            except httpx.HTTPError:
+                continue
             for flat in project_flats:
                 flats_by_id[flat.flat_id] = flat
                 houses_by_id[flat.house_id] = House(

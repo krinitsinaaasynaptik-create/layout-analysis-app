@@ -1,5 +1,7 @@
 import unittest
+import httpx
 
+from app.models import Flat
 from app.kssk_parser import KsskParser
 
 
@@ -122,6 +124,48 @@ class KsskParserTest(unittest.TestCase):
         self.assertEqual(flat.area, 40.1)
         self.assertEqual(flat.price, 4_100_000)
         self.assertEqual(flat.house_id, "scandinaviya:ул-михеева-1")
+
+    def test_parse_skips_unavailable_project(self) -> None:
+        parser = KsskParser()
+        parser.fetch = lambda url, **_kwargs: """
+        <a class="block-object-shadow" href="https://broken.kssk.ru/"><h3>Недоступный</h3></a>
+        <a class="block-object-shadow" href="https://ok.kssk.ru/"><h3>Рабочий</h3></a>
+        """  # type: ignore[method-assign]
+
+        def fake_parse_project(project_url: str, project_name: str):  # type: ignore[no-untyped-def]
+            if "broken" in project_url:
+                raise httpx.HTTPStatusError(
+                    "server error",
+                    request=httpx.Request("GET", project_url),
+                    response=httpx.Response(500, request=httpx.Request("GET", project_url)),
+                )
+            return [
+                Flat(
+                    flat_id="kssk:ok:1",
+                    code="1",
+                    project_id="ok",
+                    project_name=project_name,
+                    house_id="ok:дом-1",
+                    house_name="Дом 1",
+                    rooms="1К",
+                    area=40,
+                    floor=1,
+                    price=4_000_000,
+                    url="https://ok.kssk.ru/realty/apartment_modal/1",
+                    image_url="https://ok.kssk.ru/plan.png",
+                    layout_uuid="plan.png",
+                )
+            ]
+
+        parser._parse_project = fake_parse_project  # type: ignore[method-assign]
+
+        houses, flats, total = parser.parse()
+        parser.close()
+
+        self.assertEqual(total, 1)
+        self.assertEqual(len(houses), 1)
+        self.assertEqual(len(flats), 1)
+        self.assertEqual(flats[0].project_name, "Рабочий")
 
 
 if __name__ == "__main__":
