@@ -52,6 +52,7 @@ def build_report(
     project_id: str | None = None,
     history_project_id: str | None = None,
     history_house_id: str | None = None,
+    history_house_ids: List[str] | None = None,
     history_metric: str = "price",
     history_axis: str = "date",
     calc_mode: str = "apartments",
@@ -391,6 +392,37 @@ def build_report(
         apartment_snapshots=apartment_snapshots,
         flat_meta_by_id=raw_all_flats_by_id,
     )
+    price_history_grid = None
+    if history_house_ids is not None:
+        house_options = project_price_history.get("house_options") or []
+        option_ids = {str(item.get("id") or "") for item in house_options}
+        selected_history_house_ids = [house_id for house_id in history_house_ids if house_id in option_ids]
+        if not selected_history_house_ids:
+            selected_history_house_ids = [str(item.get("id") or "") for item in house_options if item.get("id")]
+        charts = []
+        selected_history_project_id = project_price_history.get("selected_project_id") or history_project_id
+        for selected_history_house_id in selected_history_house_ids:
+            history = _build_project_price_history(
+                selected_developer=selected_developer,
+                selected_project=selected_project,
+                history_project_id=selected_history_project_id,
+                history_house_id=selected_history_house_id,
+                history_metric=history_metric,
+                history_axis=history_axis,
+                project_options=selected_project_options,
+                projects=project_list,
+                houses=houses,
+                objectiv_project_history_monthly=objectiv_project_history_monthly,
+                snapshots=snapshots,
+                apartment_snapshots=apartment_snapshots,
+                flat_meta_by_id=raw_all_flats_by_id,
+            )
+            if history.get("selected_house_id"):
+                charts.append(history)
+        price_history_grid = {
+            "charts": charts,
+            "selected_house_ids": selected_history_house_ids,
+        }
     developer = _build_developer_analytics(project_list, flats, report_groups, dynamics)
     market = _build_market_analytics(
         developers,
@@ -456,6 +488,7 @@ def build_report(
         "market": market,
         "dynamics": dynamics,
         "project_price_history": project_price_history,
+        "price_history_grid": price_history_grid,
         "projects": project_list,
         "layouts": report_groups,
     }

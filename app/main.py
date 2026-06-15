@@ -90,51 +90,26 @@ def developer_page(request: Request, developer_id: str) -> HTMLResponse:
 
 @app.get("/developers/{developer_id}/price-history", response_class=HTMLResponse)
 def developer_price_history(request: Request, developer_id: str) -> HTMLResponse:
-    base_report = build_report(
+    selected_house_ids = _history_house_ids(request)
+    report_data = build_report(
         _period_days(request),
         developer_id=developer_id,
         project_id=_project_id(request),
         history_project_id=_history_project_id(request),
+        history_house_ids=selected_house_ids,
         history_metric=_history_metric(request),
         history_axis=_history_axis(request),
         rooms=_rooms(request),
         include_group_metrics=False,
         include_similar_layouts=False,
     )
-    selected_house_ids = _history_house_ids(request)
-    house_options = base_report.get("filters", {}).get("history_house_options") or []
-    option_ids = {str(item.get("id") or "") for item in house_options}
-    if selected_house_ids:
-        selected_house_ids = [house_id for house_id in selected_house_ids if house_id in option_ids]
-    if not selected_house_ids:
-        selected_house_ids = [str(item.get("id") or "") for item in house_options if item.get("id")]
-    charts = []
-    for house_id in selected_house_ids:
-        item_report = build_report(
-            _period_days(request),
-            developer_id=developer_id,
-            project_id=_project_id(request),
-            history_project_id=base_report.get("filters", {}).get("history_project_id") or _history_project_id(request),
-            history_house_id=house_id,
-            history_metric=_history_metric(request),
-            history_axis=_history_axis(request),
-            rooms=_rooms(request),
-            include_group_metrics=False,
-            include_similar_layouts=False,
-        )
-        history = item_report.get("project_price_history") or {}
-        if history.get("selected_house_id"):
-            charts.append(history)
-    base_report["price_history_grid"] = {
-        "charts": charts,
-        "selected_house_ids": selected_house_ids,
-    }
-    base_report["filters"]["history_house_ids"] = selected_house_ids
+    report_data["price_history_grid"] = report_data.get("price_history_grid") or {"charts": [], "selected_house_ids": []}
+    report_data["filters"]["history_house_ids"] = report_data["price_history_grid"].get("selected_house_ids") or []
     return templates.TemplateResponse(
         "developer_price_history.html",
         {
             "request": request,
-            "report": base_report,
+            "report": report_data,
         },
     )
 
