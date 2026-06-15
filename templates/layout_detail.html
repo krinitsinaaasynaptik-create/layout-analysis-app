@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Типовая планировка{% if report.selected_developer %} — {{ report.selected_developer.name }}{% endif %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+  <link rel="stylesheet" href="/static/style.css?v=20260615-2">
 </head>
 <body>
   {% if report.selected_developer %}
@@ -29,11 +29,13 @@
         <nav class="local-tabs" aria-label="Навигация по КССК">
           <a class="local-tab" href="/compare">Обзор</a>
           <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Аналитика</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/price-history">Динамика цен</a>
           <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
         </nav>
       {% else %}
         <nav class="local-tabs" aria-label="Навигация по застройщику">
           <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Обзор</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/price-history">Динамика цен</a>
           <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
         </nav>
       {% endif %}

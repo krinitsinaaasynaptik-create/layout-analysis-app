@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ report.selected_developer.name if report.selected_developer else report.competitor }} — динамика цен</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260615-2">
+</head>
+<body>
+  {% set developer_name = report.selected_developer.name if report.selected_developer else report.competitor %}
+  {% if report.selected_developer and report.selected_developer.id == 'kssk' %}
+    {% set header_active_section = 'compare' %}
+  {% else %}
+    {% set header_active_section = 'developer_detail' %}
+  {% endif %}
+  {% set header_breadcrumb = report.city ~ ' · Застройщики · ' ~ developer_name %}
+  {% set header_title = developer_name %}
+  {% set show_export = true %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    {% set run = report.latest_run %}
+    {% set filters = report.filters %}
+    {% set selected_house_ids = report.price_history_grid.selected_house_ids %}
+    {% if report.selected_developer %}
+      <nav class="local-tabs" aria-label="Навигация по застройщику">
+        {% if report.selected_developer.id == 'kssk' %}
+          <a class="local-tab" href="/compare">Обзор</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Аналитика</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/price-history">Динамика цен</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        {% else %}
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}">Обзор</a>
+          <a class="local-tab local-tab-active" href="/developers/{{ report.selected_developer.id }}/price-history">Динамика цен</a>
+          <a class="local-tab" href="/developers/{{ report.selected_developer.id }}/layouts">Планировки</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+
+    <section class="status-band {% if run and run.status == 'error' %}error{% endif %}">
+      <div>
+        <span class="label">Последнее обновление</span>
+        <strong>{{ run.finished_at if run and run.finished_at else 'еще не выполнялось' }}</strong>
+      </div>
+      <div>
+        <span class="label">Статус</span>
+        <strong>{{ run.status if run else 'нет данных' }}</strong>
+      </div>
+      <div class="status-message">Проданные и вымытые квартиры раскладываются по месяцу события, текущая экспозиция относится к текущему месяцу.</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head panel-head-wrap">
+        <div>
+          <h2>Средняя цена за м² по домам</h2>
+          <span>Выберите один проект и один или несколько домов</span>
+        </div>
+      </div>
+
+      <form class="filters-panel filters-panel-compact history-multi-filters" method="get" action="/developers/{{ report.selected_developer.id }}/price-history">
+        <input type="hidden" name="period_days" value="{{ filters.period_days }}">
+        <input type="hidden" name="project_id" value="{{ filters.project_id }}">
+        <input type="hidden" name="rooms" value="{{ filters.rooms }}">
+        <label>Проект
+          <select name="history_project_id" onchange="this.form.submit()">
+            {% for project in filters.history_project_options %}
+              <option value="{{ project.id }}" {% if filters.history_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="history-house-picker">
+          <span class="history-house-picker-label">Дома</span>
+          <details class="history-house-dropdown">
+            <summary>{{ selected_house_ids|length }} выбрано</summary>
+            <div class="history-house-menu">
+              {% for house in filters.history_house_options %}
+                <label class="history-house-option">
+                  <input type="checkbox" name="history_house_id" value="{{ house.id }}" {% if house.id in selected_house_ids %}checked{% endif %}>
+                  <span>{{ house.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </details>
+        </div>
+        <div class="filter-actions">
+          <button class="button ghost" type="submit">Применить</button>
+        </div>
+      </form>
+
+      {% if report.price_history_grid.charts %}
+        <div class="history-grid">
+          {% for price_history in report.price_history_grid.charts %}
+            <article class="history-card">
+              <div class="history-card-head">
+                <div>
+                  <h3>{{ price_history.selected_house_name }}</h3>
+                  <span>{{ price_history.selected_project_name }}</span>
+                </div>
+                {% if price_history.available and price_history.stats.current_value is not none %}
+                  <strong>{{ "{:,.0f}".format(price_history.stats.current_value).replace(",", " ") }} ₽/м²</strong>
+                {% endif %}
+              </div>
+              {% if price_history.available %}
+                <div class="history-card-meta">
+                  {% if price_history.stats.sales_start_date %}<span>Старт: {{ price_history.stats.sales_start_date }}</span>{% endif %}
+                  {% if price_history.stats.latest_snapshot_date %}<span>Срез: {{ price_history.stats.latest_snapshot_date }}</span>{% endif %}
+                  <span>{{ price_history.stats.months_with_values }} мес.</span>
+                </div>
+                <div class="history-chart-wrap history-card-chart-wrap">
+                  <svg class="history-chart history-card-chart" viewBox="{{ price_history.chart.view_box }}" preserveAspectRatio="xMidYMid meet" aria-label="График средней цены за квадратный метр">
+                    {% for tick in price_history.chart.y_ticks %}
+                      <line x1="50" y1="{{ tick.y }}" x2="1412" y2="{{ tick.y }}"></line>
+                      <text x="0" y="{{ tick.y + 4 }}">{{ tick.label }}</text>
+                    {% endfor %}
+                    {% if price_history.chart.path %}
+                      <path d="{{ price_history.chart.path }}"></path>
+                    {% endif %}
+                    {% for point in price_history.chart.points %}
+                      <g class="history-chart-point">
+                        <title>{{ point.label }} • {{ "{:,.0f}".format(point.value).replace(",", " ") }} ₽{% if point.apartments_count %} • {{ point.apartments_count }} кв.{% endif %}</title>
+                        <circle class="history-chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="9"></circle>
+                        <circle class="history-chart-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+                      </g>
+                    {% endfor %}
+                    {% for label in price_history.chart.x_labels %}
+                      <text class="x-label" x="{{ label.x }}" y="246">{{ label.label }}</text>
+                    {% endfor %}
+                  </svg>
+                </div>
+              {% else %}
+                <p class="muted">{{ price_history.message }}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Для выбранных домов пока нет истории из Объектива.</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script>
+    const toast = document.getElementById('toast');
+    function showToast(message) {
+      toast.textContent = message;
+      toast.hidden = false;
+    }
+  </script>
+  {% include "_refresh_script.html" %}
+</body>
+</html>
