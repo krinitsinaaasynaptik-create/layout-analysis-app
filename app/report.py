@@ -1354,11 +1354,11 @@ def _build_project_price_history_from_monthly_rows(
 
 def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
     width = 760
-    height = 220
-    left = 22
-    right = 18
-    top = 16
-    bottom = 34
+    height = 204
+    left = 26
+    right = 20
+    top = 14
+    bottom = 30
     values = [float(item["value"]) for item in series if item.get("value") is not None]
     if not values:
         return {
@@ -1411,10 +1411,13 @@ def _build_history_chart(series: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
         for value in tick_values
     ]
-    x_tick_step = max(1, len(series) // 6)
+    target_label_count = 5
+    x_tick_step = max(1, math.ceil((len(series) - 1) / max(target_label_count - 1, 1)))
     x_labels = []
     for index, item in enumerate(series):
         if index not in {0, len(series) - 1} and index % x_tick_step != 0:
+            continue
+        if index == len(series) - 2 and len(series) > 4:
             continue
         x = left + (step * index if len(series) > 1 else usable_width / 2)
         x_labels.append({"label": item.get("label") or "", "x": round(x, 2)})

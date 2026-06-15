@@ -1124,7 +1124,7 @@ main {
 
 .history-chart-shell {
   margin-top: 14px;
-  padding: 14px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background: var(--surface-soft);
@@ -1154,8 +1154,9 @@ main {
 .history-chart {
   display: block;
   width: 100%;
-  min-width: 720px;
-  height: 220px;
+  min-width: 680px;
+  aspect-ratio: 760 / 204;
+  height: auto;
 }
 
 .history-chart line {
@@ -1179,7 +1180,7 @@ main {
 
 .history-chart text {
   fill: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
 }
 
