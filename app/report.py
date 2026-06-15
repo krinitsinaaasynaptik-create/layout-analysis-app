@@ -13,7 +13,7 @@ from .analytics import metrics as m
 from .config import CITY, COMPETITOR, IMAGE_DIR, OWN_COMPANY, USE_LOCAL_IMAGE_FILES
 from .db import fetch_refresh_targets, fetch_report_rows, latest_run
 from .refresh_catalog import REFRESH_TARGETS
-from .project_canon import canonicalize_project_data
+from .project_canon import canonical_house_ref, canonical_project_ref, canonicalize_project_data
 
 
 ROOM_ORDER = {
@@ -182,7 +182,11 @@ def build_report(
     manual_merges = [dict(row) for row in rows.get("manual_merges", [])]
     layout_tags = [dict(row) for row in rows.get("layout_tags", [])]
     layout_group_tags = [dict(row) for row in rows.get("layout_group_tags", [])]
-    objectiv_project_history_monthly = [dict(row) for row in rows.get("objectiv_project_history_monthly", [])]
+    objectiv_project_history_monthly = _canonicalize_objectiv_history_rows(
+        [dict(row) for row in rows.get("objectiv_project_history_monthly", [])],
+        raw_project_meta=raw_project_meta,
+        raw_houses=raw_houses_all,
+    )
     snapshots = [dict(row) for row in rows.get("snapshots", [])]
     apartment_snapshots = [dict(row) for row in rows.get("apartment_snapshots", [])]
     snapshot_scope = [
@@ -1167,6 +1171,80 @@ def _select_history_house_id(history_house_id: str | None, house_options: List[D
     if history_house_id and history_house_id in option_ids:
         return history_house_id
     return str(house_options[0].get("id") or "")
+
+
+def _canonicalize_objectiv_history_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    raw_project_meta: List[Dict[str, Any]],
+    raw_houses: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    project_meta_by_id = {
+        str(project.get("id") or project.get("project_id") or ""): {
+            "developer_id": str(project.get("developer_id") or ""),
+            "project_name": str(project.get("name") or project.get("project_name") or ""),
+        }
+        for project in raw_project_meta
+    }
+    canonical_houses_by_project: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+    for house in raw_houses:
+        developer_id = str(
+            house.get("developer_id")
+            or project_meta_by_id.get(str(house.get("project_id") or ""), {}).get("developer_id", "")
+        )
+        project_ref = canonical_project_ref(
+            developer_id,
+            house.get("project_id"),
+            house.get("project_name") or project_meta_by_id.get(str(house.get("project_id") or ""), {}).get("project_name", ""),
+        )
+        house_ref = canonical_house_ref(
+            developer_id,
+            project_ref["key"],
+            house.get("house_id"),
+            house.get("house_name"),
+        )
+        canonical_houses_by_project[project_ref["key"]].append(
+            {
+                "house_id": house_ref["key"],
+                "house_name": house_ref["name"],
+            }
+        )
+
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        developer_id = str(
+            row.get("developer_id")
+            or project_meta_by_id.get(str(row.get("project_id") or ""), {}).get("developer_id", "")
+        )
+        project_ref = canonical_project_ref(
+            developer_id,
+            row.get("project_id"),
+            row.get("project_name") or project_meta_by_id.get(str(row.get("project_id") or ""), {}).get("project_name", ""),
+        )
+        house_name = str(row.get("house_name") or "").strip()
+        house_id = str(row.get("house_id") or "").strip()
+        resolved_house_id = ""
+        resolved_house_name = ""
+        if house_name or house_id:
+            house_ref = canonical_house_ref(developer_id, project_ref["key"], house_id, house_name)
+            resolved_house_id = house_ref["key"]
+            resolved_house_name = house_ref["name"]
+        else:
+            project_houses = canonical_houses_by_project.get(project_ref["key"], [])
+            if len(project_houses) == 1:
+                resolved_house_id = project_houses[0]["house_id"]
+                resolved_house_name = project_houses[0]["house_name"]
+        items.append(
+            {
+                **row,
+                "developer_id": developer_id,
+                "project_id": project_ref["key"],
+                "project_name": project_ref["name"],
+                "house_id": resolved_house_id,
+                "house_name": resolved_house_name,
+            }
+        )
+    return items
 
 
 def _build_project_price_history_from_monthly_rows(
