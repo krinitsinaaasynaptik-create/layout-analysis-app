@@ -87,7 +87,7 @@ def run_refresh(
                 raise RuntimeError(f"{developer_name}: {exc}") from exc
             groups = build_layout_groups(flats)
             replace_data(houses, flats, groups, item_developer_id, developer_name, developer_type, source_url, source)
-            if objectiv_access_token and item_developer_id == "zhcom":
+            if objectiv_access_token and item_developer_id in {"zhcom", "ksm"}:
                 replace_objectiv_project_history_monthly(
                     item_developer_id,
                     _build_objectiv_project_history_rows(item_developer_id, objectiv_access_token),
