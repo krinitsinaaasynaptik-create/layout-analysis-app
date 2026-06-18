@@ -455,13 +455,13 @@ def _summary_for_flats(developers: List[Dict[str, Any]], flats: List[Dict[str, A
                     "sum": cell["sum"],
                 }
             )
-        max_share = max((cell["count_share"] or 0) for cell in row["cells"]) if row["cells"] else 0
         for cell in row["cells"]:
             highlight = ""
-            if cell["count"] > 0 and cell["count_share"] == max_share:
-                if max_share >= 20:
+            share = cell["count_share"]
+            if cell["count"] > 0 and share is not None:
+                if share >= 20:
                     highlight = "top-share-strong"
-                elif max_share >= 10:
+                elif share >= 10:
                     highlight = "top-share-medium"
             cell["highlight"] = highlight
         wide_rows.append(row)
