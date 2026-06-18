@@ -359,6 +359,29 @@ def debug_project_classes_live(developer_id: str) -> JSONResponse:
     return JSONResponse(preview, status_code=status_code)
 
 
+@app.get("/api/debug/house-classes")
+def debug_house_classes(developer_id: str = "") -> JSONResponse:
+    rows = fetch_report_rows()
+    db_rows = [dict(row) for row in rows.get("house_classifications", [])]
+    if developer_id:
+        db_rows = [row for row in db_rows if str(row.get("developer_id") or "") == developer_id]
+    summary: Dict[str, Dict[str, Any]] = {}
+    for row in db_rows:
+        item_developer_id = str(row.get("developer_id") or "")
+        item = summary.setdefault(item_developer_id, {"total": 0, "classified": 0})
+        item["total"] += 1
+        if row.get("comfort_class"):
+            item["classified"] += 1
+    return JSONResponse(
+        {
+            "ok": True,
+            "total_rows": len(db_rows),
+            "summary": summary,
+            "sample": db_rows[:50],
+        }
+    )
+
+
 @app.get("/api/debug/objectiv-history/{developer_id}")
 def debug_objectiv_history(
     developer_id: str,
