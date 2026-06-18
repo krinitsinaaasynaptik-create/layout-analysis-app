@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Классы жилья по площади предложения</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260618-1">
+</head>
+<body>
+  {% set header_active_section = 'dashboard' %}
+  {% set header_breadcrumb = 'Дашборд · Отчеты' %}
+  {% set header_title = 'Классы жилья по площади предложения' %}
+  {% set show_export = true %}
+  {% set export_href = '/api/comfort-classes.csv?' ~ request.query_params %}
+  {% set show_refresh = true %}
+  {% include "_app_header.html" %}
+
+  <main>
+    <nav class="local-tabs" aria-label="Отчеты дашборда">
+      <a class="local-tab" href="/dashboard">Сводный отчет по площадям</a>
+      <a class="local-tab" href="/dashboard/price-dynamics">Динамика цен по домам</a>
+      <a class="local-tab local-tab-active" href="/dashboard/comfort-classes">Классы жилья</a>
+    </nav>
+
+    <form class="filters-panel dashboard-filters" method="get" action="/dashboard/comfort-classes">
+      <label>Режим рынка
+        <select name="market_mode">
+          <option value="all" {% if report.filters.market_mode == 'all' %}selected{% endif %}>КССК + конкуренты</option>
+          <option value="competitors" {% if report.filters.market_mode == 'competitors' %}selected{% endif %}>Только конкуренты</option>
+          <option value="own" {% if report.filters.market_mode == 'own' %}selected{% endif %}>Только КССК</option>
+        </select>
+      </label>
+      <label>Застройщик
+        <select name="developer_id">
+          <option value="">Все застройщики</option>
+          {% for developer in report.filters.all_developer_options %}
+            <option value="{{ developer.id }}" {% if report.filters.developer_id == developer.id %}selected{% endif %}>{{ developer.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Проект
+        <select name="project_id">
+          <option value="">Все проекты</option>
+          {% for project in report.filters.project_options %}
+            <option value="{{ project.id }}" {% if report.filters.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Комнатность
+        <select name="rooms">
+          <option value="">Все форматы</option>
+          {% for room in report.filters.room_options %}
+            <option value="{{ room.value }}" {% if report.filters.rooms == room.value %}selected{% endif %}>{{ room.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button class="button ghost" type="submit">Применить</button>
+      </div>
+    </form>
+
+    {% if not report.has_data %}
+      <section class="empty">
+        <h2>Нет данных для выбранных фильтров</h2>
+        <p>Измените фильтры или запустите обновление данных.</p>
+      </section>
+    {% else %}
+      <section class="metrics dashboard-kpis">
+        <div><span>{{ "{:,.1f}".format(report.current.total_area).replace(",", " ") }} м²</span><p>площадь в экспозиции</p></div>
+        <div><span>{{ report.current.total_count }}</span><p>квартир в экспозиции</p></div>
+        <div><span>{{ report.current.project_count }}</span><p>проектов в выборке</p></div>
+        <div><span>{{ report.current.top_class.comfort_class }}</span><p>{{ "{:,.1f}".format(report.current.top_class.area).replace(",", " ") }} м²</p></div>
+        <div><span>{{ report.current.leader_area.name }}</span><p>{{ "{:,.1f}".format(report.current.leader_area.value).replace(",", " ") }} м²</p></div>
+        <div><span>{% if report.current.classified_projects_share is not none %}{{ report.current.classified_projects_share }}%{% else %}н/д{% endif %}</span><p>проектов с классом из Объектива</p></div>
+      </section>
+
+      {% if report.warnings.missing_area or report.warnings.unclassified_projects %}
+        <section class="warning-box">
+          {% if report.warnings.missing_area %}У {{ report.warnings.missing_area }} квартир нет площади, поэтому они учтены по количеству, но не попали в расчет м².{% endif %}
+          {% if report.warnings.unclassified_projects %} Для {{ report.warnings.unclassified_projects }} проектов класс пока не определился из Объектива и они попали в группу «Не задан».{% endif %}
+        </section>
+      {% endif %}
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head"><h2>Ключевые выводы</h2></div>
+          <div class="insight-list">
+            {% for insight in report.insights %}
+              <p>{{ insight }}</p>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Покрытие классификации</h2></div>
+          <div class="fact-list">
+            <div><span>По проектам</span><strong>{% if report.current.classified_projects_share is not none %}{{ report.current.classified_projects_share }}%{% else %}н/д{% endif %}</strong></div>
+            <div><span>По площади</span><strong>{% if report.current.classified_area_share is not none %}{{ report.current.classified_area_share }}%{% else %}н/д{% endif %}</strong></div>
+            <div><span>Классифицировано проектов</span><strong>{{ report.current.classified_projects_count }} из {{ report.current.project_count }}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Площадь предложения по классам жилья</h2>
+          <span>Класс проекта берется из Объектива, площадь считается по текущей экспозиции</span>
+        </div>
+        <div class="dashboard-bars">
+          {% for row in report.current.charts %}
+            <div class="dashboard-bar-row">
+              <span>{{ row.comfort_class }}</span>
+              <div><i style="width: {{ row.width }}%;"></i></div>
+              <strong>{{ "{:,.1f}".format(row.area).replace(",", " ") }} м²</strong>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Доля застройщиков внутри класса</h2>
+          <span>По площади в экспозиции</span>
+        </div>
+        <div class="dashboard-table-wrap">
+          <table class="analytics-table dashboard-summary-table">
+            <thead>
+              <tr>
+                <th class="sticky-col">Класс жилья</th>
+                {% for developer in report.developers %}
+                  <th colspan="2">{{ developer.name }}</th>
+                {% endfor %}
+              </tr>
+              <tr>
+                <th class="sticky-col sticky-subhead"></th>
+                {% for developer in report.developers %}
+                  <th>м²</th>
+                  <th>Доля</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.current.class_rows %}
+                <tr>
+                  <td class="sticky-col">{{ row.comfort_class }}</td>
+                  {% for cell in row.cells %}
+                    <td>{{ "{:,.1f}".format(cell.area).replace(",", " ") }}</td>
+                    <td>{% if cell.class_share is not none %}{{ cell.class_share }}%{% else %}н/д{% endif %}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+              <tr class="total-row">
+                <td class="sticky-col">ИТОГО</td>
+                {% for row in report.current.developer_rows %}
+                  <td>{{ "{:,.1f}".format(row.total_area).replace(",", " ") }}</td>
+                  <td>{% if row.market_share is not none %}{{ row.market_share }}%{% else %}н/д{% endif %}</td>
+                {% endfor %}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Профиль застройщиков по классам</h2>
+          <span>Доля класса внутри площади предложения застройщика</span>
+        </div>
+        <div class="dashboard-table-wrap">
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Застройщик</th>
+                <th>Всего, м²</th>
+                {% for comfort_class in report.classes %}
+                  <th>{{ comfort_class }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.current.developer_rows %}
+                <tr>
+                  <td>{{ row.developer_name }}</td>
+                  <td>{{ "{:,.1f}".format(row.total_area).replace(",", " ") }}</td>
+                  {% for cell in row.classes %}
+                    <td>
+                      <strong>{{ "{:,.1f}".format(cell.area).replace(",", " ") }} м²</strong>
+                      <span>{% if cell.developer_share is not none %}{{ cell.developer_share }}%{% else %}н/д{% endif %}</span>
+                    </td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% if report.current.unclassified_projects %}
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Проекты без класса</h2>
+            <span>Нужен refresh с доступом к Объективу или уточнение поля класса в API</span>
+          </div>
+          <table class="analytics-table">
+            <thead>
+              <tr><th>Застройщик</th><th>Проект</th></tr>
+            </thead>
+            <tbody>
+              {% for item in report.current.unclassified_projects %}
+                <tr>
+                  <td>{{ item.developer_name }}</td>
+                  <td>{{ item.project_name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endif %}
+    {% endif %}
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  {% include "_refresh_script.html" %}
+</body>
+</html>

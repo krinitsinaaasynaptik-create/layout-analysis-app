@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -43,8 +44,7 @@ class ObjectivParser:
         if not self.access_token:
             raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
 
-        group_id = self._group_id()
-        projects = self._get_json("/api/ProjectCards/GetGroupProjects", params={"groupId": group_id}).get("projects") or []
+        projects = self._group_projects()
 
         houses_by_id: Dict[str, House] = {}
         flats: List[Flat] = []
@@ -74,8 +74,7 @@ class ObjectivParser:
         if not self.access_token:
             raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
 
-        group_id = self._group_id()
-        projects = self._get_json("/api/ProjectCards/GetGroupProjects", params={"groupId": group_id}).get("projects") or []
+        projects = self._group_projects()
         project_rows: List[Dict[str, Any]] = []
 
         for item in projects:
@@ -126,6 +125,23 @@ class ObjectivParser:
             ),
         )
 
+    def build_project_class_rows(self) -> List[Dict[str, Any]]:
+        if not self.access_token:
+            raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
+
+        rows: List[Dict[str, Any]] = []
+        for item in self._group_projects():
+            project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
+            self._write_cache(f"objectiv_project_{item['id']}.json", project)
+            rows.append(
+                {
+                    "project_id": f"objectiv:{project['id']}",
+                    "project_name": str(project.get("name") or item.get("name") or f"objectiv:{item['id']}"),
+                    "comfort_class": self._extract_project_class(item, project),
+                }
+            )
+        return rows
+
     def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         response = self.client.get(urljoin(self.base_url, path), params=params)
         if response.status_code == 401:
@@ -142,6 +158,10 @@ class ObjectivParser:
             if group.get("name") == self.group_name:
                 return int(group["id"])
         raise ValueError(f"Objectiv group not found: {self.group_name}")
+
+    def _group_projects(self) -> List[Dict[str, Any]]:
+        group_id = self._group_id()
+        return self._get_json("/api/ProjectCards/GetGroupProjects", params={"groupId": group_id}).get("projects") or []
 
     def _latest_grid_date(self, oks_id: int) -> str:
         data = self._get_json("/api/ProjectCards/getGridIntervals", params={"oksId": oks_id})
@@ -329,6 +349,95 @@ class ObjectivParser:
         if not digits:
             return None
         return int(digits)
+
+    def _extract_project_class(self, *payloads: Dict[str, Any]) -> str | None:
+        candidates: List[tuple[int, str]] = []
+        for payload in payloads:
+            self._collect_project_class_candidates(payload, candidates)
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        for _score, value in candidates:
+            normalized = self._normalize_project_class(value)
+            if normalized:
+                return normalized
+        return None
+
+    def _collect_project_class_candidates(self, node: Any, candidates: List[tuple[int, str]], *, parent_key: str = "") -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                normalized_key = self._normalize_key(key)
+                score = self._project_class_key_score(normalized_key)
+                if score:
+                    text_value = self._candidate_text_value(value)
+                    if text_value:
+                        candidates.append((score, text_value))
+                self._collect_project_class_candidates(value, candidates, parent_key=normalized_key or parent_key)
+            return
+        if isinstance(node, list):
+            for item in node:
+                self._collect_project_class_candidates(item, candidates, parent_key=parent_key)
+
+    def _project_class_key_score(self, key: str) -> int:
+        if not key:
+            return 0
+        if key in {
+            "class",
+            "classname",
+            "projectclass",
+            "comfortclass",
+            "housingclass",
+            "realtyclass",
+            "objectclass",
+            "segment",
+            "segmentname",
+            "marketsegment",
+        }:
+            return 100
+        if "comfort" in key or "komfort" in key:
+            return 90
+        if "class" in key:
+            return 80
+        if "segment" in key:
+            return 70
+        if "klass" in key:
+            return 70
+        return 0
+
+    def _candidate_text_value(self, value: Any) -> str | None:
+        if isinstance(value, str):
+            text = value.strip()
+            return text if text and len(text) <= 48 else None
+        if isinstance(value, dict):
+            for nested_key in ("name", "title", "label", "value", "displayName", "display_name"):
+                nested_value = value.get(nested_key)
+                if isinstance(nested_value, str) and nested_value.strip():
+                    text = nested_value.strip()
+                    if len(text) <= 48:
+                        return text
+        return None
+
+    def _normalize_project_class(self, value: str) -> str | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        compact = re.sub(r"\s+", " ", text.lower().replace("ё", "е")).strip()
+        if "прем" in compact or "premium" in compact or "elite" in compact or "элит" in compact:
+            return "Премиум"
+        if "бизнес" in compact or "business" in compact:
+            return "Бизнес"
+        if "комфорт+" in compact or "comfort+" in compact or "comfort plus" in compact or "комфорт плюс" in compact:
+            return "Комфорт+"
+        if "комфорт" in compact or "comfort" in compact:
+            return "Комфорт"
+        if "стандарт" in compact or "standard" in compact or "эконом" in compact or "econom" in compact:
+            return "Стандарт"
+        if len(text) <= 32:
+            return text[:1].upper() + text[1:]
+        return None
+
+    def _normalize_key(self, value: Any) -> str:
+        return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
     def _write_cache(self, filename: str, data: Dict[str, Any]) -> None:
         CACHE_DIR.mkdir(exist_ok=True)

@@ -261,6 +261,16 @@ def _schema_sql(backend: str) -> str:
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS project_classifications (
+            project_id TEXT PRIMARY KEY,
+            developer_id TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            comfort_class TEXT,
+            source TEXT NOT NULL DEFAULT 'objectiv',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS layout_tags (
             id {serial},
             name TEXT NOT NULL UNIQUE,
@@ -835,6 +845,9 @@ def fetch_report_rows() -> Dict[str, List[Any]]:
             "houses": conn.execute("SELECT * FROM houses ORDER BY project_name, house_name").fetchall(),
             "developers": conn.execute("SELECT * FROM developers ORDER BY name").fetchall(),
             "projects": conn.execute("SELECT * FROM projects ORDER BY name").fetchall(),
+            "project_classifications": conn.execute(
+                "SELECT * FROM project_classifications ORDER BY developer_id, project_name"
+            ).fetchall(),
             "flats": conn.execute(
                 """
                 SELECT * FROM flats
@@ -868,6 +881,46 @@ def fetch_report_rows() -> Dict[str, List[Any]]:
                 "SELECT * FROM manual_layout_merges ORDER BY created_at, id"
             ).fetchall(),
         }
+
+
+def replace_project_classifications(
+    developer_id: str,
+    rows: Iterable[Dict[str, Any]],
+    *,
+    source: str = "objectiv",
+) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    items = [dict(row) for row in rows if row.get("project_id")]
+    with connect() as conn:
+        conn.execute("DELETE FROM project_classifications WHERE developer_id = ?", (developer_id,))
+        if not items:
+            return
+        conn.executemany(
+            """
+            INSERT INTO project_classifications (
+                project_id, developer_id, project_name, comfort_class, source, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                developer_id = excluded.developer_id,
+                project_name = excluded.project_name,
+                comfort_class = excluded.comfort_class,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            [
+                (
+                    str(item.get("project_id") or ""),
+                    developer_id,
+                    str(item.get("project_name") or item.get("project_id") or ""),
+                    item.get("comfort_class"),
+                    source,
+                    now,
+                    now,
+                )
+                for item in items
+            ],
+        )
 
 
 def create_manual_merge(

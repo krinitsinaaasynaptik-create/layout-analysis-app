@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from .db import finish_run, replace_objectiv_project_history_monthly, start_run
+from .db import finish_run, replace_objectiv_project_history_monthly, replace_project_classifications, start_run
 from .objectiv_house_metadata import OBJECTIV_GROUP_BY_DEVELOPER
 from .grouping import build_layout_groups
 from .ksm_seller_parser import KsmSellerParser
@@ -88,6 +88,10 @@ def run_refresh(
             groups = build_layout_groups(flats)
             replace_data(houses, flats, groups, item_developer_id, developer_name, developer_type, source_url, source)
             if objectiv_access_token and item_developer_id in OBJECTIV_GROUP_BY_DEVELOPER:
+                replace_project_classifications(
+                    item_developer_id,
+                    _build_objectiv_project_class_rows(item_developer_id, objectiv_access_token),
+                )
                 replace_objectiv_project_history_monthly(
                     item_developer_id,
                     _build_objectiv_project_history_rows(item_developer_id, objectiv_access_token),
@@ -153,6 +157,28 @@ def _build_objectiv_project_history_rows(developer_id: str, access_token: str) -
                 "snapshot_date": row.get("snapshot_date"),
                 "avg_price_per_sqm": row.get("avg_price_per_sqm"),
                 "apartments_count": row.get("apartments_count"),
+            }
+        )
+    return result
+
+
+def _build_objectiv_project_class_rows(developer_id: str, access_token: str) -> list[dict[str, Any]]:
+    group_name = OBJECTIV_GROUP_BY_DEVELOPER.get(developer_id)
+    if not group_name or not access_token:
+        return []
+    parser = ObjectivParser(group_name=group_name, access_token=access_token)
+    try:
+        rows = parser.build_project_class_rows()
+    finally:
+        parser.close()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        ref = canonical_project_ref(developer_id, row.get("project_id"), row.get("project_name"))
+        result.append(
+            {
+                "project_id": ref["key"],
+                "project_name": ref["name"],
+                "comfort_class": row.get("comfort_class"),
             }
         )
     return result

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .area_dashboard import build_area_dashboard, export_area_dashboard_csv, export_area_dashboard_xlsx
+from .comfort_dashboard import build_comfort_dashboard, export_comfort_dashboard_csv
 from .config import BASE_DIR, IMAGE_DIR, ensure_dirs
 from .db import (
     create_manual_merge,
@@ -218,6 +219,22 @@ def price_dynamics_dashboard(request: Request) -> HTMLResponse:
                 area_group=(request.query_params.get("area_group") or "").strip(),
                 status_filter=_price_dynamics_status(request),
                 view=(request.query_params.get("view") or "current").strip(),
+            ),
+        },
+    )
+
+
+@app.get("/dashboard/comfort-classes", response_class=HTMLResponse)
+def comfort_classes_dashboard(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "dashboard_comfort.html",
+        {
+            "request": request,
+            "report": build_comfort_dashboard(
+                developer_id=_developer_id(request) or "",
+                project_id=_project_id(request) or "",
+                rooms=_rooms(request) or "",
+                market_mode=_market_mode(request),
             ),
         },
     )
@@ -438,6 +455,20 @@ def export_price_dynamics(request: Request) -> PlainTextResponse:
         ),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="price-dynamics.csv"'},
+    )
+
+
+@app.get("/api/comfort-classes.csv")
+def export_comfort_classes(request: Request) -> PlainTextResponse:
+    return PlainTextResponse(
+        export_comfort_dashboard_csv(
+            developer_id=_developer_id(request) or "",
+            project_id=_project_id(request) or "",
+            rooms=_rooms(request) or "",
+            market_mode=_market_mode(request),
+        ),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="comfort-classes.csv"'},
     )
 
 
