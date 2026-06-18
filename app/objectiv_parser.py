@@ -363,8 +363,19 @@ class ObjectivParser:
                 return normalized
         return None
 
-    def _collect_project_class_candidates(self, node: Any, candidates: List[tuple[int, str]], *, parent_key: str = "") -> None:
+    def _collect_project_class_candidates(
+        self,
+        node: Any,
+        candidates: List[tuple[int, str]],
+        *,
+        parent_key: str = "",
+        inherited_score: int = 0,
+    ) -> None:
         if isinstance(node, dict):
+            if inherited_score:
+                text_value = self._candidate_text_value(node)
+                if text_value:
+                    candidates.append((inherited_score, text_value))
             for key, value in node.items():
                 normalized_key = self._normalize_key(key)
                 score = self._project_class_key_score(normalized_key)
@@ -372,11 +383,21 @@ class ObjectivParser:
                     text_value = self._candidate_text_value(value)
                     if text_value:
                         candidates.append((score, text_value))
-                self._collect_project_class_candidates(value, candidates, parent_key=normalized_key or parent_key)
+                self._collect_project_class_candidates(
+                    value,
+                    candidates,
+                    parent_key=normalized_key or parent_key,
+                    inherited_score=max(inherited_score, score),
+                )
             return
         if isinstance(node, list):
             for item in node:
-                self._collect_project_class_candidates(item, candidates, parent_key=parent_key)
+                self._collect_project_class_candidates(
+                    item,
+                    candidates,
+                    parent_key=parent_key,
+                    inherited_score=inherited_score,
+                )
 
     def _project_class_key_score(self, key: str) -> int:
         if not key:

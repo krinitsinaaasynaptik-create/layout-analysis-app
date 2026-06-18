@@ -61,6 +61,20 @@ class ComfortDashboardTest(unittest.TestCase):
             parser.close()
         self.assertEqual(value, "Комфорт")
 
+    def test_objectiv_parser_extracts_project_class_from_class_list_payload(self) -> None:
+        parser = ObjectivParser(access_token="test")
+        try:
+            value = parser._extract_project_class(  # pylint: disable=protected-access
+                {
+                    "projectClasses": [
+                        {"id": 3, "name": "Бизнес-класс"},
+                    ]
+                }
+            )
+        finally:
+            parser.close()
+        self.assertEqual(value, "Бизнес")
+
 
 if __name__ == "__main__":
     unittest.main()
