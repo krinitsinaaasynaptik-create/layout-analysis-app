@@ -147,6 +147,27 @@ def sync_project_classifications(
         return {"ok": False, "message": str(exc)}
 
 
+def preview_project_classifications(
+    objectiv_access_token: str,
+    developer_id: str,
+) -> Dict[str, Any]:
+    if not objectiv_access_token:
+        return {"ok": False, "message": "Нужен токен Объектива."}
+    if developer_id not in OBJECTIV_GROUP_BY_DEVELOPER:
+        return {"ok": False, "message": f"Для {developer_id} нет группы Объектива."}
+    try:
+        rows = _build_objectiv_project_class_rows(developer_id, objectiv_access_token)
+        return {
+            "ok": True,
+            "developer_id": developer_id,
+            "total": len(rows),
+            "classified": sum(1 for row in rows if row.get("comfort_class")),
+            "rows": rows,
+        }
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 def env_tokens() -> tuple[str, str]:
     objectiv_access_token = (os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
     ksm_session_id = (os.environ.get("KSM_PHPSESSID") or "").strip()

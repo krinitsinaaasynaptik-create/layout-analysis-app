@@ -21,7 +21,7 @@ from .db import (
     update_layout_tags,
 )
 from .price_dynamics import build_price_dynamics_report, export_price_dynamics_csv
-from .refresh_service import run_refresh, sync_project_classifications
+from .refresh_service import preview_project_classifications, run_refresh, sync_project_classifications
 from .report import build_compare_report, build_csv, build_report
 
 
@@ -326,6 +326,37 @@ async def refresh_project_classes_for_developer(developer_id: str, request: Requ
 @app.get("/api/report")
 def report() -> JSONResponse:
     return JSONResponse(build_report(developer_scope="competitors"))
+
+
+@app.get("/api/debug/project-classes")
+def debug_project_classes(developer_id: str = "") -> JSONResponse:
+    rows = fetch_report_rows()
+    db_rows = [dict(row) for row in rows.get("project_classifications", [])]
+    if developer_id:
+        db_rows = [row for row in db_rows if str(row.get("developer_id") or "") == developer_id]
+    summary: Dict[str, Dict[str, Any]] = {}
+    for row in db_rows:
+        item_developer_id = str(row.get("developer_id") or "")
+        item = summary.setdefault(item_developer_id, {"total": 0, "classified": 0})
+        item["total"] += 1
+        if row.get("comfort_class"):
+            item["classified"] += 1
+    return JSONResponse(
+        {
+            "ok": True,
+            "total_rows": len(db_rows),
+            "summary": summary,
+            "sample": db_rows[:20],
+        }
+    )
+
+
+@app.get("/api/debug/project-classes/{developer_id}")
+def debug_project_classes_live(developer_id: str) -> JSONResponse:
+    objectiv_access_token = (os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
+    preview = preview_project_classifications(objectiv_access_token, developer_id.strip())
+    status_code = 200 if preview.get("ok") else 400
+    return JSONResponse(preview, status_code=status_code)
 
 
 @app.get("/api/debug/objectiv-history/{developer_id}")
