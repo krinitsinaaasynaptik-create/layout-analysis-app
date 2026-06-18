@@ -4,20 +4,26 @@ import os
 from typing import Any, Dict, Optional
 
 from .db import (
+    fetch_report_rows,
     finish_run,
     replace_house_classifications,
     replace_objectiv_project_history_monthly,
     replace_project_classifications,
     start_run,
 )
-from .objectiv_house_metadata import OBJECTIV_GROUP_BY_DEVELOPER
+from .objectiv_house_metadata import (
+    OBJECTIV_GROUP_BY_DEVELOPER,
+    _manual_match_key,
+    _objective_match_key,
+    _site_match_key,
+)
 from .grouping import build_layout_groups
 from .ksm_seller_parser import KsmSellerParser
 from .kssk_parser import KsskParser
 from .objectiv_house_metadata import enrich_houses_with_objectiv_metadata
 from .objectiv_parser import ObjectivParser
 from .parser import ZhcomParser
-from .project_canon import canonical_house_ref, canonical_project_ref
+from .project_canon import canonical_house_ref, canonical_project_ref, canonicalize_project_data
 from .refresh_catalog import REFRESH_TARGET_BY_ID, REFRESH_TARGETS
 from .report import build_report
 from .sretensky_parser import SretenskyParser
@@ -258,6 +264,7 @@ def _build_objectiv_house_class_rows(developer_id: str, access_token: str) -> li
         rows = parser.build_house_class_rows()
     finally:
         parser.close()
+    rows = _map_objectiv_house_class_rows(developer_id, rows)
     result: list[dict[str, Any]] = []
     for row in rows:
         ref = canonical_project_ref(developer_id, row.get("project_id"), row.get("project_name"))
@@ -277,3 +284,39 @@ def _build_objectiv_house_class_rows(developer_id: str, access_token: str) -> li
             }
         )
     return result
+
+
+def _map_objectiv_house_class_rows(developer_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    report_rows = fetch_report_rows()
+    projects, houses, _, _ = canonicalize_project_data(
+        [dict(row) for row in report_rows.get("projects", [])],
+        [dict(row) for row in report_rows.get("houses", []) if dict(row).get("developer_id") == developer_id],
+        [],
+        [],
+    )
+    _ = projects
+    houses_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for house in houses:
+        key = _site_match_key(developer_id, house.get("project_name", ""), house.get("house_name", ""))
+        houses_by_key[key] = house
+        manual_key = _manual_match_key(developer_id, house.get("project_name", ""), house.get("house_name", ""))
+        if manual_key:
+            houses_by_key.setdefault(manual_key, house)
+
+    mapped_rows: list[dict[str, Any]] = []
+    for row in rows:
+        key = _objective_match_key(developer_id, row.get("project_name", ""), row.get("house_name", ""))
+        matched_house = houses_by_key.get(key)
+        if not matched_house:
+            mapped_rows.append(row)
+            continue
+        mapped_rows.append(
+            {
+                **row,
+                "project_id": matched_house.get("project_id") or row.get("project_id"),
+                "project_name": matched_house.get("project_name") or row.get("project_name"),
+                "house_id": matched_house.get("house_id") or row.get("house_id"),
+                "house_name": matched_house.get("house_name") or row.get("house_name"),
+            }
+        )
+    return mapped_rows

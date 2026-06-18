@@ -2,6 +2,7 @@ import unittest
 
 from app.comfort_dashboard import UNKNOWN_CLASS, _summary_for_flats
 from app.objectiv_parser import ObjectivParser
+from app.refresh_service import _map_objectiv_house_class_rows
 
 
 class ComfortDashboardTest(unittest.TestCase):
@@ -194,6 +195,58 @@ class ComfortDashboardTest(unittest.TestCase):
                 },
             ],
         )
+
+    def test_map_objectiv_house_class_rows_matches_zhcom_house_ids(self) -> None:
+        import app.refresh_service as refresh_service
+
+        original_fetch_report_rows = refresh_service.fetch_report_rows
+        try:
+            refresh_service.fetch_report_rows = lambda: {  # type: ignore[method-assign]
+                "projects": [
+                    {"id": "zaryadnoe", "developer_id": "zhcom", "name": "ЖК Зарядное"},
+                    {"id": "bulychev", "developer_id": "zhcom", "name": "Дом Булычев"},
+                ],
+                "houses": [
+                    {
+                        "house_id": "zaryadnoe:дом-4-1",
+                        "developer_id": "zhcom",
+                        "project_id": "zaryadnoe",
+                        "project_name": "ЖК Зарядное",
+                        "house_name": "Дом 4/1",
+                    },
+                    {
+                        "house_id": "bulychev:дом-28",
+                        "developer_id": "zhcom",
+                        "project_id": "bulychev",
+                        "project_name": "Дом Булычев",
+                        "house_name": "Дом 28",
+                    },
+                ],
+            }
+            rows = _map_objectiv_house_class_rows(
+                "zhcom",
+                [
+                    {
+                        "project_id": "objectiv:1",
+                        "project_name": "Зарядное",
+                        "house_id": "objectiv:5001",
+                        "house_name": "Зарядное, корпус 4.1",
+                        "comfort_class": "Комфорт",
+                    },
+                    {
+                        "project_id": "objectiv:2",
+                        "project_name": "Дом Булычев",
+                        "house_id": "objectiv:5002",
+                        "house_name": "1",
+                        "comfort_class": "Премиум",
+                    },
+                ],
+            )
+        finally:
+            refresh_service.fetch_report_rows = original_fetch_report_rows  # type: ignore[method-assign]
+
+        self.assertEqual(rows[0]["house_id"], "zhcom:зарядное:дом 4/1")
+        self.assertEqual(rows[1]["house_id"], "zhcom:дом булычев:дом 28")
 
 
 if __name__ == "__main__":
