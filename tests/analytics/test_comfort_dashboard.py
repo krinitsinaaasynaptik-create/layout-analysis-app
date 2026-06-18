@@ -89,6 +89,19 @@ class ComfortDashboardTest(unittest.TestCase):
             parser.close()
         self.assertEqual(value, "Комфорт")
 
+    def test_objectiv_parser_does_not_treat_project_name_premier_as_premium(self) -> None:
+        parser = ObjectivParser(access_token="test")
+        try:
+            value = parser._extract_project_class(  # pylint: disable=protected-access
+                {
+                    "name": "Премьер",
+                    "title": "ЖК Премьер",
+                }
+            )
+        finally:
+            parser.close()
+        self.assertIsNone(value)
+
 
 if __name__ == "__main__":
     unittest.main()

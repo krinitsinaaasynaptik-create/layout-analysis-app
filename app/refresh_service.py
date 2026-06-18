@@ -214,7 +214,7 @@ def _build_objectiv_project_class_rows(developer_id: str, access_token: str) -> 
         return []
     parser = ObjectivParser(group_name=group_name, access_token=access_token)
     try:
-        rows = parser.build_project_class_rows()
+        rows = parser.debug_project_class_rows()
     finally:
         parser.close()
     result: list[dict[str, Any]] = []
@@ -225,6 +225,8 @@ def _build_objectiv_project_class_rows(developer_id: str, access_token: str) -> 
                 "project_id": ref["key"],
                 "project_name": ref["name"],
                 "comfort_class": row.get("comfort_class"),
+                "candidates": row.get("candidates", []),
+                "sample_strings": row.get("sample_strings", []),
             }
         )
     return result

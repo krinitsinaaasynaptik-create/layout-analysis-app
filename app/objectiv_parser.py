@@ -142,6 +142,25 @@ class ObjectivParser:
             )
         return rows
 
+    def debug_project_class_rows(self) -> List[Dict[str, Any]]:
+        if not self.access_token:
+            raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
+
+        rows: List[Dict[str, Any]] = []
+        for item in self._group_projects():
+            project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
+            candidates = self._project_class_candidates(item, project)
+            rows.append(
+                {
+                    "project_id": f"objectiv:{project['id']}",
+                    "project_name": str(project.get("name") or item.get("name") or f"objectiv:{item['id']}"),
+                    "comfort_class": self._extract_project_class(item, project),
+                    "candidates": candidates[:20],
+                    "sample_strings": self._all_text_values(project)[:40],
+                }
+            )
+        return rows
+
     def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         response = self.client.get(urljoin(self.base_url, path), params=params)
         if response.status_code == 401:
@@ -351,16 +370,13 @@ class ObjectivParser:
         return int(digits)
 
     def _extract_project_class(self, *payloads: Dict[str, Any]) -> str | None:
-        candidates: List[tuple[int, str]] = []
-        for payload in payloads:
-            self._collect_project_class_candidates(payload, candidates)
+        candidates = self._project_class_candidates(*payloads)
         if not candidates:
             for payload in payloads:
                 fallback = self._fallback_project_class_from_strings(payload)
                 if fallback:
                     return fallback
             return None
-        candidates.sort(key=lambda item: item[0], reverse=True)
         for _score, value in candidates:
             normalized = self._normalize_project_class(value)
             if normalized:
@@ -370,6 +386,13 @@ class ObjectivParser:
             if fallback:
                 return fallback
         return None
+
+    def _project_class_candidates(self, *payloads: Dict[str, Any]) -> List[tuple[int, str]]:
+        candidates: List[tuple[int, str]] = []
+        for payload in payloads:
+            self._collect_project_class_candidates(payload, candidates)
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates
 
     def _collect_project_class_candidates(
         self,
@@ -451,17 +474,31 @@ class ObjectivParser:
         if not text:
             return None
         compact = re.sub(r"\s+", " ", text.lower().replace("ё", "е")).strip()
-        if "прем" in compact or "premium" in compact or "elite" in compact or "элит" in compact:
+        if compact in {"премиум", "premium", "элит", "элитный", "elite"}:
             return "Премиум"
-        if "бизнес" in compact or "business" in compact:
+        if compact in {"бизнес", "business", "бизнес-класс", "business class"}:
             return "Бизнес"
         if "комфорт+" in compact or "comfort+" in compact or "comfort plus" in compact or "комфорт плюс" in compact:
             return "Комфорт+"
-        if "комфорт" in compact or "comfort" in compact:
+        if compact in {"комфорт", "comfort", "комфорт-класс", "comfort class"}:
             return "Комфорт"
-        if "стандарт" in compact or "standard" in compact or "эконом" in compact or "econom" in compact:
+        if compact in {"стандарт", "standard", "эконом", "econom", "эконом-класс", "standard class"}:
             return "Стандарт"
-        if len(text) <= 32:
+        if (
+            "класс" in compact
+            and any(token in compact for token in ("премиум", "premium", "бизнес", "business", "комфорт", "comfort", "стандарт", "standard", "эконом", "econom"))
+        ):
+            if "премиум" in compact or "premium" in compact:
+                return "Премиум"
+            if "бизнес" in compact or "business" in compact:
+                return "Бизнес"
+            if "комфорт+" in compact or "comfort+" in compact or "комфорт плюс" in compact or "comfort plus" in compact:
+                return "Комфорт+"
+            if "комфорт" in compact or "comfort" in compact:
+                return "Комфорт"
+            if "стандарт" in compact or "standard" in compact or "эконом" in compact or "econom" in compact:
+                return "Стандарт"
+        if len(text) <= 32 and text in {"Премиум", "Бизнес", "Комфорт+", "Комфорт", "Стандарт"}:
             return text[:1].upper() + text[1:]
         return None
 
