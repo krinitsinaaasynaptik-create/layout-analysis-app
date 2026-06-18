@@ -227,6 +227,7 @@ def _build_objectiv_project_class_rows(developer_id: str, access_token: str) -> 
                 "comfort_class": row.get("comfort_class"),
                 "candidates": row.get("candidates", []),
                 "sample_strings": row.get("sample_strings", []),
+                "oks_classes": row.get("oks_classes", []),
             }
         )
     return result

@@ -102,6 +102,31 @@ class ComfortDashboardTest(unittest.TestCase):
             parser.close()
         self.assertIsNone(value)
 
+    def test_objectiv_parser_prefers_oks_class_for_project(self) -> None:
+        parser = ObjectivParser(group_name="Железно", access_token="test")
+
+        def fake_get_json(path, params=None):  # type: ignore[no-untyped-def]
+            params = params or {}
+            if path == "/api/ProjectCards/GetGroups":
+                return {"groups": [{"id": 1, "name": "Железно"}]}
+            if path == "/api/ProjectCards/GetGroupProjects":
+                return {"projects": [{"id": 101, "name": "ZNAK"}]}
+            if path == "/api/ProjectCards/GetProjectInfo":
+                return {"id": 101, "name": "ZNAK", "okses": [{"id": 5001}, {"id": 5002}]}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5001}:
+                return {"id": 5001, "name": "1", "class": "Комфорт"}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5002}:
+                return {"id": 5002, "name": "2", "class": "Комфорт-класс"}
+            raise AssertionError((path, params))
+
+        parser._get_json = fake_get_json  # type: ignore[method-assign]
+        try:
+            rows = parser.build_project_class_rows()
+        finally:
+            parser.close()
+
+        self.assertEqual(rows, [{"project_id": "objectiv:101", "project_name": "ZNAK", "comfort_class": "Комфорт"}])
+
 
 if __name__ == "__main__":
     unittest.main()

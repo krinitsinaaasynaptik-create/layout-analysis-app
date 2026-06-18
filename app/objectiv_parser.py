@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import re
+from collections import Counter
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -133,11 +134,12 @@ class ObjectivParser:
         for item in self._group_projects():
             project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
             self._write_cache(f"objectiv_project_{item['id']}.json", project)
+            oks_infos = self._project_oks_infos(project)
             rows.append(
                 {
                     "project_id": f"objectiv:{project['id']}",
                     "project_name": str(project.get("name") or item.get("name") or f"objectiv:{item['id']}"),
-                    "comfort_class": self._extract_project_class(item, project),
+                    "comfort_class": self._extract_project_class_for_project(item, project, oks_infos),
                 }
             )
         return rows
@@ -149,17 +151,49 @@ class ObjectivParser:
         rows: List[Dict[str, Any]] = []
         for item in self._group_projects():
             project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
-            candidates = self._project_class_candidates(item, project)
+            oks_infos = self._project_oks_infos(project)
+            candidates = self._project_class_candidates(item, project, *oks_infos)
             rows.append(
                 {
                     "project_id": f"objectiv:{project['id']}",
                     "project_name": str(project.get("name") or item.get("name") or f"objectiv:{item['id']}"),
-                    "comfort_class": self._extract_project_class(item, project),
+                    "comfort_class": self._extract_project_class_for_project(item, project, oks_infos),
                     "candidates": candidates[:20],
-                    "sample_strings": self._all_text_values(project)[:40],
+                    "sample_strings": self._all_text_values({"project": project, "okses": oks_infos})[:80],
+                    "oks_classes": [
+                        {
+                            "oks_id": oks_info.get("id"),
+                            "oks_name": oks_info.get("name"),
+                            "comfort_class": self._extract_project_class(oks_info),
+                        }
+                        for oks_info in oks_infos
+                    ],
                 }
             )
         return rows
+
+    def _project_oks_infos(self, project: Dict[str, Any]) -> List[Dict[str, Any]]:
+        oks_infos: List[Dict[str, Any]] = []
+        for oks in project.get("okses") or []:
+            oks_id = self._int(oks.get("id"))
+            if oks_id is None:
+                continue
+            oks_info = self._get_json("/api/ProjectCards/GetOksInfo", params={"oksId": oks_id})
+            self._write_cache(f"objectiv_oks_{oks_id}.json", oks_info)
+            oks_infos.append(oks_info)
+        return oks_infos
+
+    def _extract_project_class_for_project(
+        self,
+        item: Dict[str, Any],
+        project: Dict[str, Any],
+        oks_infos: List[Dict[str, Any]],
+    ) -> str | None:
+        oks_classes = [value for oks_info in oks_infos if (value := self._extract_project_class(oks_info))]
+        if oks_classes:
+            counts = Counter(oks_classes)
+            return max(counts.items(), key=lambda item: (item[1], -oks_classes.index(item[0])))[0]
+        return self._extract_project_class(item, project)
 
     def _get_json(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         response = self.client.get(urljoin(self.base_url, path), params=params)
