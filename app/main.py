@@ -360,11 +360,16 @@ def debug_project_classes_live(developer_id: str) -> JSONResponse:
 
 
 @app.get("/api/debug/house-classes")
-def debug_house_classes(developer_id: str = "") -> JSONResponse:
+def debug_house_classes(developer_id: str = "", project_id: str = "", project_name: str = "") -> JSONResponse:
     rows = fetch_report_rows()
     db_rows = [dict(row) for row in rows.get("house_classifications", [])]
     if developer_id:
         db_rows = [row for row in db_rows if str(row.get("developer_id") or "") == developer_id]
+    if project_id:
+        db_rows = [row for row in db_rows if str(row.get("project_id") or "") == project_id]
+    if project_name:
+        needle = project_name.strip().lower()
+        db_rows = [row for row in db_rows if needle in str(row.get("project_name") or "").lower()]
     summary: Dict[str, Dict[str, Any]] = {}
     for row in db_rows:
         item_developer_id = str(row.get("developer_id") or "")
@@ -376,6 +381,11 @@ def debug_house_classes(developer_id: str = "") -> JSONResponse:
         {
             "ok": True,
             "total_rows": len(db_rows),
+            "filters": {
+                "developer_id": developer_id,
+                "project_id": project_id,
+                "project_name": project_name,
+            },
             "summary": summary,
             "sample": db_rows[:50],
         }
