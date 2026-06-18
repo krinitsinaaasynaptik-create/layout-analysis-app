@@ -6,6 +6,7 @@ from app.project_canon import canonical_project_ref, canonicalize_project_data
 class ProjectCanonTest(unittest.TestCase):
     def test_canonical_project_ref_normalizes_aliases(self) -> None:
         self.assertEqual(canonical_project_ref("zhcom", "1", "ЗНАК")["key"], "zhcom:знак")
+        self.assertEqual(canonical_project_ref("zhcom", "1", "ZNAK")["key"], "zhcom:знак")
         self.assertEqual(canonical_project_ref("zhcom", "2", "ЖК ZNAK")["name"], "ЖК ZNAK")
         self.assertEqual(canonical_project_ref("zhcom", "3", "Булычев")["key"], "zhcom:дом булычев")
         self.assertEqual(canonical_project_ref("zhcom", "3", "Булычев")["name"], "Дом Булычев")
@@ -54,7 +55,7 @@ class ProjectCanonTest(unittest.TestCase):
             ],
         )
 
-        znak_house = next(house for house in houses if house["project_id"] == "zhcom:znak")
+        znak_house = next(house for house in houses if house["project_id"] == "zhcom:знак")
         self.assertIn("c1d7fe8c-9334-11ee-827e-00155dfe0e0c", znak_house["legacy_house_ids"])
 
         bulychev_flat = next(flat for flat in flats if flat["project_id"] == "zhcom:дом булычев")

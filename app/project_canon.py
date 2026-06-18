@@ -16,6 +16,10 @@ PROJECT_NAME_ALIASES = {
 
 PROJECT_KEY_ALIASES = {
     "zhcom": {
+        "znak": "знак",
+        "zaryadnoe": "зарядное",
+        "innograd": "инноград",
+        "dom bulychev": "дом булычев",
         "булычев": "дом булычев",
     },
 }
