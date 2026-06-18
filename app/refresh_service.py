@@ -290,13 +290,19 @@ def _map_objectiv_house_class_rows(developer_id: str, rows: list[dict[str, Any]]
     report_rows = fetch_report_rows()
     projects, houses, _, _ = canonicalize_project_data(
         [dict(row) for row in report_rows.get("projects", [])],
-        [dict(row) for row in report_rows.get("houses", []) if dict(row).get("developer_id") == developer_id],
+        [dict(row) for row in report_rows.get("houses", [])],
         [],
         [],
     )
-    _ = projects
+    developer_project_ids = {
+        str(project.get("project_id") or project.get("id") or "")
+        for project in projects
+        if str(project.get("developer_id") or "") == developer_id
+    }
     houses_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     for house in houses:
+        if str(house.get("project_id") or "") not in developer_project_ids:
+            continue
         key = _site_match_key(developer_id, house.get("project_name", ""), house.get("house_name", ""))
         houses_by_key[key] = house
         manual_key = _manual_match_key(developer_id, house.get("project_name", ""), house.get("house_name", ""))
