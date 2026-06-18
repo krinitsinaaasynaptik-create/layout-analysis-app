@@ -728,6 +728,14 @@ main {
   background: #fcfcfd;
 }
 
+.dashboard-summary-table tbody td.top-share-medium {
+  background: #fff3bf;
+}
+
+.dashboard-summary-table tbody td.top-share-strong {
+  background: #ffd8a8;
+}
+
 .dashboard-summary-table .sticky-col {
   position: -webkit-sticky;
   position: sticky;

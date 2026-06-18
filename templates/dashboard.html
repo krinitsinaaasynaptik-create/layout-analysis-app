@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Сводный отчет по площадям</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260526-4">
+  <link rel="stylesheet" href="/static/style.css?v=20260618-1">
 </head>
 <body>
   {% set header_active_section = 'dashboard' %}
@@ -140,8 +140,8 @@
                 <tr>
                   <td class="sticky-col">{{ row.area_range }}</td>
                   {% for cell in row.cells %}
-                    <td>{{ cell.count }}</td>
-                    <td>{{ "{:,.0f}".format(cell.sum).replace(",", " ") }} ₽</td>
+                    <td class="{{ cell.highlight }}" {% if cell.count_share is not none %}title="Доля в диапазоне: {{ cell.count_share }}%"{% endif %}>{{ cell.count }}</td>
+                    <td class="{{ cell.highlight }}" {% if cell.count_share is not none %}title="Доля в диапазоне: {{ cell.count_share }}%"{% endif %}>{{ "{:,.0f}".format(cell.sum).replace(",", " ") }} ₽</td>
                   {% endfor %}
                 </tr>
               {% endfor %}
