@@ -122,6 +122,31 @@ def run_refresh(
             parser.close()
 
 
+def sync_project_classifications(
+    objectiv_access_token: str,
+    developer_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    target_ids = [developer_id] if developer_id else list(OBJECTIV_GROUP_BY_DEVELOPER)
+    if not objectiv_access_token:
+        return {"ok": False, "message": "Нужен токен Объектива."}
+
+    messages: list[str] = []
+    try:
+        for item_developer_id in target_ids:
+            if item_developer_id not in OBJECTIV_GROUP_BY_DEVELOPER:
+                continue
+            rows = _build_objectiv_project_class_rows(item_developer_id, objectiv_access_token)
+            replace_project_classifications(item_developer_id, rows)
+            classified = sum(1 for row in rows if row.get("comfort_class"))
+            messages.append(f"{item_developer_id}: {classified}/{len(rows)} проектов с классом")
+        return {
+            "ok": True,
+            "message": "Классы проектов синхронизированы: " + "; ".join(messages) + ".",
+        }
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 def env_tokens() -> tuple[str, str]:
     objectiv_access_token = (os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
     ksm_session_id = (os.environ.get("KSM_PHPSESSID") or "").strip()

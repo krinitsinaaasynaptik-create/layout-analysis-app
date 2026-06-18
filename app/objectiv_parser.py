@@ -355,12 +355,20 @@ class ObjectivParser:
         for payload in payloads:
             self._collect_project_class_candidates(payload, candidates)
         if not candidates:
+            for payload in payloads:
+                fallback = self._fallback_project_class_from_strings(payload)
+                if fallback:
+                    return fallback
             return None
         candidates.sort(key=lambda item: item[0], reverse=True)
         for _score, value in candidates:
             normalized = self._normalize_project_class(value)
             if normalized:
                 return normalized
+        for payload in payloads:
+            fallback = self._fallback_project_class_from_strings(payload)
+            if fallback:
+                return fallback
         return None
 
     def _collect_project_class_candidates(
@@ -456,6 +464,29 @@ class ObjectivParser:
         if len(text) <= 32:
             return text[:1].upper() + text[1:]
         return None
+
+    def _fallback_project_class_from_strings(self, node: Any) -> str | None:
+        for text in self._all_text_values(node):
+            normalized = self._normalize_project_class(text)
+            if normalized in {"Премиум", "Бизнес", "Комфорт+", "Комфорт", "Стандарт"}:
+                return normalized
+        return None
+
+    def _all_text_values(self, node: Any) -> List[str]:
+        values: List[str] = []
+        if isinstance(node, str):
+            text = node.strip()
+            if text and len(text) <= 64:
+                values.append(text)
+            return values
+        if isinstance(node, dict):
+            for value in node.values():
+                values.extend(self._all_text_values(value))
+            return values
+        if isinstance(node, list):
+            for item in node:
+                values.extend(self._all_text_values(item))
+        return values
 
     def _normalize_key(self, value: Any) -> str:
         return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())

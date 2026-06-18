@@ -21,7 +21,7 @@ from .db import (
     update_layout_tags,
 )
 from .price_dynamics import build_price_dynamics_report, export_price_dynamics_csv
-from .refresh_service import run_refresh
+from .refresh_service import run_refresh, sync_project_classifications
 from .report import build_compare_report, build_csv, build_report
 
 
@@ -299,6 +299,28 @@ async def refresh_developer(developer_id: str, request: Request) -> JSONResponse
     objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
     ksm_session_id = (body.get("ksm_session_id") or os.environ.get("KSM_PHPSESSID") or "").strip()
     return _run_refresh(objectiv_access_token, ksm_session_id, developer_id.strip())
+
+
+@app.post("/api/refresh-project-classes")
+async def refresh_project_classes(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
+    payload = sync_project_classifications(objectiv_access_token)
+    return JSONResponse(payload, status_code=200 if payload.get("ok") else 400)
+
+
+@app.post("/api/refresh-project-classes/{developer_id}")
+async def refresh_project_classes_for_developer(developer_id: str, request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    objectiv_access_token = (body.get("objectiv_access_token") or os.environ.get("OBJECTIV_ACCESS_TOKEN") or "").strip()
+    payload = sync_project_classifications(objectiv_access_token, developer_id.strip())
+    return JSONResponse(payload, status_code=200 if payload.get("ok") else 400)
 
 
 @app.get("/api/report")

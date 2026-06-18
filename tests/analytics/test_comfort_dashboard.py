@@ -75,6 +75,20 @@ class ComfortDashboardTest(unittest.TestCase):
             parser.close()
         self.assertEqual(value, "Бизнес")
 
+    def test_objectiv_parser_falls_back_to_plain_string_search(self) -> None:
+        parser = ObjectivParser(access_token="test")
+        try:
+            value = parser._extract_project_class(  # pylint: disable=protected-access
+                {
+                    "cards": [
+                        {"title": "Описание", "text": "Жилой комплекс комфорт-класса с приватным двором"},
+                    ]
+                }
+            )
+        finally:
+            parser.close()
+        self.assertEqual(value, "Комфорт")
+
 
 if __name__ == "__main__":
     unittest.main()
