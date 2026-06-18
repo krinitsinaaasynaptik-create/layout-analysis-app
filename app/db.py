@@ -271,6 +271,18 @@ def _schema_sql(backend: str) -> str:
             updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS house_classifications (
+            house_id TEXT PRIMARY KEY,
+            developer_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            house_name TEXT NOT NULL,
+            comfort_class TEXT,
+            source TEXT NOT NULL DEFAULT 'objectiv',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS layout_tags (
             id {serial},
             name TEXT NOT NULL UNIQUE,
@@ -848,6 +860,9 @@ def fetch_report_rows() -> Dict[str, List[Any]]:
             "project_classifications": conn.execute(
                 "SELECT * FROM project_classifications ORDER BY developer_id, project_name"
             ).fetchall(),
+            "house_classifications": conn.execute(
+                "SELECT * FROM house_classifications ORDER BY developer_id, project_name, house_name"
+            ).fetchall(),
             "flats": conn.execute(
                 """
                 SELECT * FROM flats
@@ -913,6 +928,50 @@ def replace_project_classifications(
                     str(item.get("project_id") or ""),
                     developer_id,
                     str(item.get("project_name") or item.get("project_id") or ""),
+                    item.get("comfort_class"),
+                    source,
+                    now,
+                    now,
+                )
+                for item in items
+            ],
+        )
+
+
+def replace_house_classifications(
+    developer_id: str,
+    rows: Iterable[Dict[str, Any]],
+    *,
+    source: str = "objectiv",
+) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    items = [dict(row) for row in rows if row.get("house_id")]
+    with connect() as conn:
+        conn.execute("DELETE FROM house_classifications WHERE developer_id = ?", (developer_id,))
+        if not items:
+            return
+        conn.executemany(
+            """
+            INSERT INTO house_classifications (
+                house_id, developer_id, project_id, project_name, house_name, comfort_class, source, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(house_id) DO UPDATE SET
+                developer_id = excluded.developer_id,
+                project_id = excluded.project_id,
+                project_name = excluded.project_name,
+                house_name = excluded.house_name,
+                comfort_class = excluded.comfort_class,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            [
+                (
+                    str(item.get("house_id") or ""),
+                    developer_id,
+                    str(item.get("project_id") or ""),
+                    str(item.get("project_name") or item.get("project_id") or ""),
+                    str(item.get("house_name") or item.get("house_id") or ""),
                     item.get("comfort_class"),
                     source,
                     now,

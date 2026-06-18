@@ -3,7 +3,13 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from .db import finish_run, replace_objectiv_project_history_monthly, replace_project_classifications, start_run
+from .db import (
+    finish_run,
+    replace_house_classifications,
+    replace_objectiv_project_history_monthly,
+    replace_project_classifications,
+    start_run,
+)
 from .objectiv_house_metadata import OBJECTIV_GROUP_BY_DEVELOPER
 from .grouping import build_layout_groups
 from .ksm_seller_parser import KsmSellerParser
@@ -92,6 +98,10 @@ def run_refresh(
                     item_developer_id,
                     _build_objectiv_project_class_rows(item_developer_id, objectiv_access_token),
                 )
+                replace_house_classifications(
+                    item_developer_id,
+                    _build_objectiv_house_class_rows(item_developer_id, objectiv_access_token),
+                )
                 replace_objectiv_project_history_monthly(
                     item_developer_id,
                     _build_objectiv_project_history_rows(item_developer_id, objectiv_access_token),
@@ -136,9 +146,15 @@ def sync_project_classifications(
             if item_developer_id not in OBJECTIV_GROUP_BY_DEVELOPER:
                 continue
             rows = _build_objectiv_project_class_rows(item_developer_id, objectiv_access_token)
+            house_rows = _build_objectiv_house_class_rows(item_developer_id, objectiv_access_token)
             replace_project_classifications(item_developer_id, rows)
+            replace_house_classifications(item_developer_id, house_rows)
             classified = sum(1 for row in rows if row.get("comfort_class"))
-            messages.append(f"{item_developer_id}: {classified}/{len(rows)} проектов с классом")
+            classified_houses = sum(1 for row in house_rows if row.get("comfort_class"))
+            messages.append(
+                f"{item_developer_id}: {classified}/{len(rows)} проектов с классом, "
+                f"{classified_houses}/{len(house_rows)} корпусов с классом"
+            )
         return {
             "ok": True,
             "message": "Классы проектов синхронизированы: " + "; ".join(messages) + ".",
@@ -228,6 +244,36 @@ def _build_objectiv_project_class_rows(developer_id: str, access_token: str) -> 
                 "candidates": row.get("candidates", []),
                 "sample_strings": row.get("sample_strings", []),
                 "oks_classes": row.get("oks_classes", []),
+            }
+        )
+    return result
+
+
+def _build_objectiv_house_class_rows(developer_id: str, access_token: str) -> list[dict[str, Any]]:
+    group_name = OBJECTIV_GROUP_BY_DEVELOPER.get(developer_id)
+    if not group_name or not access_token:
+        return []
+    parser = ObjectivParser(group_name=group_name, access_token=access_token)
+    try:
+        rows = parser.build_house_class_rows()
+    finally:
+        parser.close()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        ref = canonical_project_ref(developer_id, row.get("project_id"), row.get("project_name"))
+        house_ref = canonical_house_ref(
+            developer_id,
+            ref["key"],
+            row.get("house_id"),
+            row.get("house_name"),
+        )
+        result.append(
+            {
+                "project_id": ref["key"],
+                "project_name": ref["name"],
+                "house_id": house_ref["key"],
+                "house_name": house_ref["name"],
+                "comfort_class": row.get("comfort_class"),
             }
         )
     return result

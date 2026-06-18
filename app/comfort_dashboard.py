@@ -31,6 +31,7 @@ def build_comfort_dashboard(
         [],
     )
     project_classifications = [dict(row) for row in rows.get("project_classifications", [])]
+    house_classifications = [dict(row) for row in rows.get("house_classifications", [])]
 
     active_developers = _filter_developers(developers, developer_id, market_mode)
     active_developer_ids = {developer["id"] for developer in active_developers}
@@ -40,7 +41,13 @@ def build_comfort_dashboard(
     ]
 
     filtered_flats = _filter_flats(flats, active_developer_ids, project_id, rooms)
-    current = _summary_for_flats(active_developers, active_projects, filtered_flats, project_classifications)
+    current = _summary_for_flats(
+        active_developers,
+        active_projects,
+        filtered_flats,
+        project_classifications,
+        house_classifications,
+    )
 
     return {
         "filters": {
@@ -151,6 +158,7 @@ def _summary_for_flats(
     projects: List[Dict[str, Any]],
     flats: List[Dict[str, Any]],
     project_classifications: List[Dict[str, Any]],
+    house_classifications: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     developer_ids = [developer["id"] for developer in developers]
     developers_by_id = {developer["id"]: developer for developer in developers}
@@ -158,6 +166,11 @@ def _summary_for_flats(
         str(row.get("project_id") or ""): _normalize_class_label(row.get("comfort_class")) or UNKNOWN_CLASS
         for row in project_classifications
         if row.get("project_id")
+    }
+    house_class_by_id = {
+        str(row.get("house_id") or ""): _normalize_class_label(row.get("comfort_class")) or UNKNOWN_CLASS
+        for row in house_classifications
+        if row.get("house_id")
     }
     active_project_ids = {str(flat.get("project_id") or "") for flat in flats if flat.get("project_id")}
     active_projects = {
@@ -178,7 +191,10 @@ def _summary_for_flats(
         developer_id = str(flat.get("developer_id") or "")
         if developer_id not in developer_area_totals:
             continue
-        comfort_class = project_class_by_id.get(str(flat.get("project_id") or ""), UNKNOWN_CLASS)
+        comfort_class = house_class_by_id.get(
+            str(flat.get("house_id") or ""),
+            project_class_by_id.get(str(flat.get("project_id") or ""), UNKNOWN_CLASS),
+        )
         area = _float(flat.get("area"))
         class_count_totals[comfort_class] = class_count_totals.get(comfort_class, 0) + 1
         matrix.setdefault(

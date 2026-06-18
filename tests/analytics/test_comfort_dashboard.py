@@ -29,6 +29,7 @@ class ComfortDashboardTest(unittest.TestCase):
                 {"project_id": "kssk:prime", "comfort_class": "Бизнес"},
                 {"project_id": "dev2:park", "comfort_class": "Комфорт"},
             ],
+            [],
         )
 
         self.assertEqual(report["total_area"], 100.0)
@@ -126,6 +127,73 @@ class ComfortDashboardTest(unittest.TestCase):
             parser.close()
 
         self.assertEqual(rows, [{"project_id": "objectiv:101", "project_name": "ZNAK", "comfort_class": "Комфорт"}])
+
+    def test_summary_prefers_house_class_over_project_class(self) -> None:
+        report = _summary_for_flats(
+            self.developers,
+            self.projects,
+            [
+                {
+                    "flat_id": "1",
+                    "developer_id": "kssk",
+                    "project_id": "kssk:prime",
+                    "house_id": "kssk:prime:дом 1",
+                    "area": 60.0,
+                },
+            ],
+            [
+                {"project_id": "kssk:prime", "comfort_class": "Стандарт"},
+            ],
+            [
+                {"house_id": "kssk:prime:дом 1", "comfort_class": "Бизнес"},
+            ],
+        )
+
+        business_row = next(item for item in report["class_rows"] if item["comfort_class"] == "Бизнес")
+        self.assertEqual(business_row["market_area"], 60.0)
+
+    def test_objectiv_parser_builds_house_class_rows_from_oks_info(self) -> None:
+        parser = ObjectivParser(group_name="Железно", access_token="test")
+
+        def fake_get_json(path, params=None):  # type: ignore[no-untyped-def]
+            params = params or {}
+            if path == "/api/ProjectCards/GetGroups":
+                return {"groups": [{"id": 1, "name": "Железно"}]}
+            if path == "/api/ProjectCards/GetGroupProjects":
+                return {"projects": [{"id": 101, "name": "ZNAK"}]}
+            if path == "/api/ProjectCards/GetProjectInfo":
+                return {"id": 101, "name": "ZNAK", "okses": [{"id": 5001}, {"id": 5002}]}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5001}:
+                return {"id": 5001, "name": "1", "class": "Комфорт"}
+            if path == "/api/ProjectCards/GetOksInfo" and params == {"oksId": 5002}:
+                return {"id": 5002, "name": "2", "class": "Стандарт"}
+            raise AssertionError((path, params))
+
+        parser._get_json = fake_get_json  # type: ignore[method-assign]
+        try:
+            rows = parser.build_house_class_rows()
+        finally:
+            parser.close()
+
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "house_id": "objectiv:5001",
+                    "house_name": "1",
+                    "comfort_class": "Комфорт",
+                },
+                {
+                    "project_id": "objectiv:101",
+                    "project_name": "ZNAK",
+                    "house_id": "objectiv:5002",
+                    "house_name": "2",
+                    "comfort_class": "Стандарт",
+                },
+            ],
+        )
 
 
 if __name__ == "__main__":

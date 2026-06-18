@@ -144,6 +144,26 @@ class ObjectivParser:
             )
         return rows
 
+    def build_house_class_rows(self) -> List[Dict[str, Any]]:
+        if not self.access_token:
+            raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
+
+        rows: List[Dict[str, Any]] = []
+        for item in self._group_projects():
+            project = self._get_json("/api/ProjectCards/GetProjectInfo", params={"projectId": item["id"]})
+            self._write_cache(f"objectiv_project_{item['id']}.json", project)
+            for oks_info in self._project_oks_infos(project):
+                rows.append(
+                    {
+                        "project_id": f"objectiv:{project['id']}",
+                        "project_name": str(project.get("name") or item.get("name") or f"objectiv:{item['id']}"),
+                        "house_id": f"objectiv:{oks_info['id']}",
+                        "house_name": str(oks_info.get("name") or oks_info.get("id") or ""),
+                        "comfort_class": self._extract_project_class(oks_info),
+                    }
+                )
+        return rows
+
     def debug_project_class_rows(self) -> List[Dict[str, Any]]:
         if not self.access_token:
             raise RuntimeError("OBJECTIV_ACCESS_TOKEN is required for ObjectivParser")
